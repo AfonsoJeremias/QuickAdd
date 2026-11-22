@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>QuickAdd</AssemblyName>
+    <RootNamespace>QuickAdd</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Pin to the exact SDK version your Playnite uses if the build complains -->
+    <PackageReference Include="PlayniteSDK" Version="6.*" />
+  </ItemGroup>
+</Project>
