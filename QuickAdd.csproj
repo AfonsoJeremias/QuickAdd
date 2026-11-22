@@ -7,7 +7,8 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Pin to the exact SDK version your Playnite uses if the build complains -->
-    <PackageReference Include="PlayniteSDK" Version="6.*" />
+    <!-- 6.12.0 = first SDK with OnControllerButtonStateChanged + CreateWindow working in Fullscreen -->
+    <PackageReference Include="PlayniteSDK" Version="6.12.0" />
+    <Reference Include="System.Drawing" />
   </ItemGroup>
 </Project>

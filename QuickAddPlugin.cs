@@ -1,4 +1,6 @@
+using FullscreenKit;
 using Playnite.SDK;
+using Playnite.SDK.Events;
 using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
@@ -14,46 +16,41 @@ namespace QuickAdd
 {
     public class QuickAddPlugin : GenericPlugin
     {
+        static readonly string[] Exts = { ".exe", ".lnk", ".bat", ".cmd" };
+
         public override Guid Id { get; } = new Guid("c1a5e0d2-7b3f-4e6a-9d18-5f2b8a4c7e91");
 
         public QuickAddPlugin(IPlayniteAPI api) : base(api) { }
 
-        // Shows up in Playnite's menu in desktop AND fullscreen (under "Extensions").
         public override IEnumerable<MainMenuItem> GetMainMenuItems(GetMainMenuItemsArgs args)
         {
             yield return new MainMenuItem
             {
                 Description = "Add a game or app...",
                 MenuSection = "Quick Add",
-                Action = a => OpenBrowser()
+                Action = a => AddLoop()
             };
         }
 
-        void OpenBrowser()
+        // Fullscreen controller input goes straight to the picker (no virtual cursor).
+        public override void OnControllerButtonStateChanged(OnControllerButtonStateChangedArgs args)
         {
-            var window = PlayniteApi.Dialogs.CreateWindow(new WindowCreationOptions
-            {
-                ShowMinimizeButton = false,
-                ShowMaximizeButton = false,
-                ShowCloseButton = true
-            });
-            window.Title = "Add a game or app";
-            window.Owner = PlayniteApi.Dialogs.GetCurrentAppWindow();
-            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            if (PlayniteApi.ApplicationInfo.Mode == ApplicationMode.Fullscreen)
-            {
-                window.WindowState = WindowState.Maximized;
-            }
-            else
-            {
-                window.Width = 900;
-                window.Height = 650;
-            }
-            window.Content = new FileBrowserView(window, this);
-            window.ShowDialog();
+            PickerHost.RouteController(args.Button, args.State == ControllerInputState.Pressed);
         }
 
-        internal void AddFromPath(string path)
+        void AddLoop()
+        {
+            while (true)
+            {
+                var path = PickerHost.PickFile(PlayniteApi, "Add a game or app", Exts);
+                if (string.IsNullOrEmpty(path)) return;
+                if (!AddFromPath(path)) return;
+                var again = PlayniteApi.Dialogs.ShowMessage("Added. Add another one?", "Quick Add", MessageBoxButton.YesNo);
+                if (again != MessageBoxResult.Yes) return;
+            }
+        }
+
+        bool AddFromPath(string path)
         {
             try
             {
@@ -67,11 +64,8 @@ namespace QuickAdd
                 }
 
                 var dir = string.IsNullOrEmpty(workDir) ? Path.GetDirectoryName(target) : workDir;
-                var suggested = SuggestName(path, target);
-
-                // Playnite's own dialog: has the on-screen keyboard in fullscreen.
-                var input = PlayniteApi.Dialogs.SelectString("Name of the game / app:", "Add game", suggested);
-                if (!input.Result || string.IsNullOrWhiteSpace(input.SelectedString)) return;
+                var input = PlayniteApi.Dialogs.SelectString("Name of the game / app:", "Add game", SuggestName(path, target));
+                if (!input.Result || string.IsNullOrWhiteSpace(input.SelectedString)) return false;
                 var name = input.SelectedString.Trim();
 
                 var exists = PlayniteApi.Database.Games.Any(g => g.GameActions != null &&
@@ -80,7 +74,7 @@ namespace QuickAdd
                         "This file is already in your library. Add it again?", "Quick Add",
                         MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                 {
-                    return;
+                    return false;
                 }
 
                 var game = new Game(name)
@@ -92,12 +86,8 @@ namespace QuickAdd
                     {
                         new GameAction
                         {
-                            Type = GameActionType.File,
-                            Name = name,
-                            Path = target,
-                            Arguments = args,
-                            WorkingDir = dir,
-                            IsPlayAction = true
+                            Type = GameActionType.File, Name = name, Path = target,
+                            Arguments = args, WorkingDir = dir, IsPlayAction = true
                         }
                     }
                 };
@@ -106,11 +96,12 @@ namespace QuickAdd
                 if (pc != null) game.PlatformIds = new List<Guid> { pc.Id };
 
                 PlayniteApi.Database.Games.Add(game);
-                PlayniteApi.Dialogs.ShowMessage($"\"{name}\" was added to your library.", "Quick Add");
+                return true;
             }
             catch (Exception ex)
             {
                 PlayniteApi.Dialogs.ShowErrorMessage(ex.Message, "Quick Add");
+                return false;
             }
         }
 
@@ -127,7 +118,6 @@ namespace QuickAdd
             return Path.GetFileNameWithoutExtension(target);
         }
 
-        // WScript.Shell via reflection (no COM reference needed).
         static bool ResolveShortcut(string lnk, out string target, out string args, out string workDir)
         {
             target = args = workDir = null;
@@ -136,9 +126,7 @@ namespace QuickAdd
                 var shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
                 var sc = shell.GetType().InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { lnk });
                 string Get(string p) => sc.GetType().InvokeMember(p, BindingFlags.GetProperty, null, sc, null) as string;
-                target = Get("TargetPath");
-                args = Get("Arguments");
-                workDir = Get("WorkingDirectory");
+                target = Get("TargetPath"); args = Get("Arguments"); workDir = Get("WorkingDirectory");
                 return true;
             }
             catch { return false; }

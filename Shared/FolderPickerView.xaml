@@ -1,0 +1,67 @@
+<UserControl x:Class="FullscreenKit.FolderPickerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="True" FocusVisualStyle="{x:Null}">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="PickerBg" Color="#FF14181C"/>
+        <SolidColorBrush x:Key="PickerAccent" Color="#FF2F7DD1"/>
+        <Style x:Key="PickerRow" TargetType="ListBoxItem">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsHitTestVisible" Value="{Binding Selectable}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Margin="0,2" Padding="16,10" CornerRadius="8" Background="Transparent">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PickerAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource PickerBg}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="48,32,48,12">
+            <TextBlock x:Name="TitleText" FontSize="32" FontWeight="SemiBold" Foreground="White"/>
+            <TextBlock x:Name="PathText" FontSize="16" Foreground="#FFA0A8B0" Margin="0,6,0,0"
+                       TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+
+        <ListBox x:Name="List" Grid.Row="1" Margin="40,0,40,0"
+                 Background="Transparent" BorderThickness="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ItemContainerStyle="{StaticResource PickerRow}">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="48"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Glyph}" FontFamily="Segoe MDL2 Assets" FontSize="26"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Text}" FontSize="{Binding TextSize}"
+                                       Foreground="{Binding TextBrush}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Sub}" FontSize="14" Foreground="#FFB8C0C8"
+                                       TextTrimming="CharacterEllipsis" Visibility="{Binding SubVisibility}"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <TextBlock x:Name="HintText" Grid.Row="2" Margin="48,12,48,28" FontSize="16" Foreground="#FF8A929A"/>
+    </Grid>
+</UserControl>
