@@ -33,21 +33,20 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- header: title + path, current mode on the right -->
+        <!-- header: title + path on the left, mode tabs on the right -->
         <Grid Grid.Row="0" Margin="48,32,48,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel>
-                <TextBlock x:Name="TitleText" FontSize="32" FontWeight="SemiBold" Foreground="White"/>
+                <TextBlock x:Name="TitleText" FontSize="32" FontWeight="SemiBold" Foreground="White"
+                           TextTrimming="CharacterEllipsis"/>
                 <TextBlock x:Name="PathText" FontSize="16" Foreground="#FFA0A8B0" Margin="0,6,0,0"
                            TextTrimming="CharacterEllipsis"/>
             </StackPanel>
-            <Border x:Name="ModeBadge" Grid.Column="1" CornerRadius="16" Padding="18,6" Margin="16,4,0,0"
-                    VerticalAlignment="Top" Background="#FF2F7DD1" Visibility="Collapsed">
-                <TextBlock x:Name="ModeText" FontSize="16" FontWeight="Bold" Foreground="White"/>
-            </Border>
+            <StackPanel x:Name="TabsPanel" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top"
+                        Margin="16,4,0,0" Visibility="Collapsed"/>
         </Grid>
 
         <ListBox x:Name="List" Grid.Row="1" Margin="40,0,40,0"
@@ -78,17 +77,26 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- background move progress (collapsed when nothing is running) -->
-        <Border x:Name="ProgressPanel" Grid.Row="2" Margin="48,10,48,0" Padding="16,10" CornerRadius="8"
-                Background="#FF1E252B" Visibility="Collapsed">
-            <StackPanel>
-                <TextBlock x:Name="ProgressText" FontSize="16" Foreground="White" TextTrimming="CharacterEllipsis"/>
-                <ProgressBar x:Name="MoveBar" Height="10" Margin="0,8,0,0" Minimum="0" Maximum="100"
-                             BorderThickness="0" Background="#FF2A3138" Foreground="#FFF2A33A"/>
-            </StackPanel>
-        </Border>
+        <!-- background jobs (collapsed when nothing is running) -->
+        <StackPanel Grid.Row="2" Margin="48,10,48,0">
+            <Border x:Name="ProgressPanel" Padding="16,10" CornerRadius="8" Background="#FF1E252B" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="ProgressText" FontSize="16" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                    <ProgressBar x:Name="MoveBar" Height="10" Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                 BorderThickness="0" Background="#FF2A3138" Foreground="#FFF2A33A"/>
+                </StackPanel>
+            </Border>
+            <Border x:Name="ScanPanel" Padding="16,10" CornerRadius="8" Background="#FF1E252B" Margin="0,8,0,0"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="ScanText" FontSize="16" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                    <ProgressBar x:Name="ScanBar" Height="10" Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                 BorderThickness="0" Background="#FF2A3138" Foreground="#FF2FA36B"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
-        <!-- button prompts: change with the current mode -->
+        <!-- button prompts: change with mode and page -->
         <WrapPanel x:Name="HintPanel" Grid.Row="3" Margin="48,12,48,28"/>
     </Grid>
 </UserControl>

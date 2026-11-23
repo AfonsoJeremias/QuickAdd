@@ -10,5 +10,6 @@
     <!-- 6.12.0 = first SDK with OnControllerButtonStateChanged + CreateWindow working in Fullscreen -->
     <PackageReference Include="PlayniteSDK" Version="6.12.0" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
   </ItemGroup>
 </Project>

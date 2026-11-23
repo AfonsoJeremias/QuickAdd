@@ -38,10 +38,17 @@ namespace QuickAdd
             PickerHost.RouteController(args.Button, args.State == ControllerInputState.Pressed);
         }
 
+        public override void OnApplicationStarted(OnApplicationStartedEventArgs args)
+        {
+            PickerHost.Configure(PlayniteApi, GetPluginUserDataPath());
+            SafeIconExtractor.Cleanup(GetPluginUserDataPath()); // only removes this plugin's own leftovers
+        }
+
         void AddLoop()
         {
+            PickerHost.Configure(PlayniteApi, GetPluginUserDataPath()); // idempotent safety net
             // Fullscreen: X marks games (even across folders), Start adds all marked, A adds the highlighted one too.
-            var paths = PickerHost.PickFiles(PlayniteApi, "Add games or apps", Exts, null, true, true);
+            var paths = PickerHost.PickFiles(PlayniteApi, "Quick Add", Exts, null, true, true, true);
             if (paths == null || paths.Count == 0) return;
 
             int added = 0;

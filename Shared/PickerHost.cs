@@ -10,13 +10,20 @@ namespace FullscreenKit
 {
     /// <summary>
     /// One entry point for picking folders / files.
-    /// Desktop: native Windows dialogs (modern Explorer style for folders). Fullscreen: FolderPickerView in a Playnite
-    /// window sized to the Playnite window, driven by OnControllerButtonStateChanged.
-    /// Forward OnControllerButtonStateChanged in your plugin to RouteController.
+    /// Desktop: native Windows dialogs. Fullscreen: FolderPickerView in a Playnite window sized to the Playnite window,
+    /// driven by OnControllerButtonStateChanged (Add / Move / Scan modes).
+    /// Call Configure once, and forward OnControllerButtonStateChanged to RouteController.
     /// </summary>
     public static class PickerHost
     {
         static FolderPickerView active;
+
+        public static void Configure(IPlayniteAPI api, string dataDirectory)
+        {
+            MoveManager.Init(api);
+            ScanManager.Init(api, dataDirectory);
+            ScanSettings.Load(dataDirectory); // no-op after the first call
+        }
 
         public static string PickFolder(IPlayniteAPI api, string title, string startPath = null)
         {
@@ -30,7 +37,7 @@ namespace FullscreenKit
                 }
                 catch
                 {
-                    return api.Dialogs.SelectFolder(); // last resort: the old dialog
+                    return api.Dialogs.SelectFolder();
                 }
             }
             return ShowView(api, new PickerOptions { Title = title, FoldersOnly = true, StartPath = startPath })?.FirstOrDefault();
@@ -41,12 +48,13 @@ namespace FullscreenKit
             return PickFiles(api, title, extensions, startPath, false)?.FirstOrDefault();
         }
 
-        /// <summary>Fullscreen: X marks files, Start adds all marked, Select (if allowMove) switches to Move mode.
-        /// Desktop: native multi-select file dialog (Explorer already moves files there).</summary>
+        /// <summary>
+        /// Fullscreen: X marks files, Start adds the marked ones. allowMove / allowScan enable the Move and Scan modes
+        /// (switch with left/right). Desktop: native multi-select file dialog.
+        /// </summary>
         public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions,
-            string startPath = null, bool allowMultiple = true, bool allowMove = false)
+            string startPath = null, bool allowMultiple = true, bool allowMove = false, bool allowScan = false)
         {
-            MoveManager.Init(api);
             extensions = extensions ?? new string[0];
             if (api.ApplicationInfo.Mode == ApplicationMode.Desktop)
             {
@@ -59,7 +67,8 @@ namespace FullscreenKit
 
             var result = ShowView(api, new PickerOptions
             {
-                Title = title, FoldersOnly = false, AllowMultiple = allowMultiple, AllowMove = allowMove,
+                Title = title, FoldersOnly = false, AllowMultiple = allowMultiple,
+                AllowMove = allowMove, AllowScan = allowScan,
                 Extensions = extensions, StartPath = startPath
             });
             return result == null ? null : result.ToList();
@@ -74,6 +83,13 @@ namespace FullscreenKit
 
         static IList<string> ShowView(IPlayniteAPI api, PickerOptions options)
         {
+            // text prompts (rename, edit patterns) use Playnite's own dialog, which has the on-screen keyboard
+            options.PromptText = (message, caption, defaultText) =>
+            {
+                var r = api.Dialogs.SelectString(message, caption, defaultText ?? "");
+                return r.Result ? r.SelectedString : null;
+            };
+
             IList<string> result = null;
             var view = new FolderPickerView(options);
             var owner = api.Dialogs.GetCurrentAppWindow();
