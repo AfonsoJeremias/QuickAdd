@@ -1,0 +1,11 @@
+AddonId: 'QuickAdd_FullscreenAddGame'
+Packages:
+  - Version: 1.0.0
+    RequiredApiVersion: 6.12.0
+    ReleaseDate: 2026-11-23
+    PackageUrl: https://github.com/AfonsoJeremias/QuickAdd/releases/download/v1.0.0/QuickAdd_1.0.0.pext
+    Changelog:
+      - Initial release
+      - Controller-friendly file browser for Fullscreen mode
+      - Mark several games with X and add them all with Start
+      - Move mode with background progress bar and notifications
