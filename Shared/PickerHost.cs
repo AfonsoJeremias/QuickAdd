@@ -1,6 +1,7 @@
 using Playnite.SDK;
 using Playnite.SDK.Events;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Interop;
@@ -9,9 +10,9 @@ namespace FullscreenKit
 {
     /// <summary>
     /// One entry point for picking folders / files.
-    /// Desktop: modern Windows dialog (Explorer style). Fullscreen: FolderPickerView in a Playnite window
-    /// sized to the Playnite window, driven by OnControllerButtonStateChanged.
-    /// Remember to forward OnControllerButtonStateChanged in your plugin to RouteController.
+    /// Desktop: native Windows dialogs (modern Explorer style for folders). Fullscreen: FolderPickerView in a Playnite
+    /// window sized to the Playnite window, driven by OnControllerButtonStateChanged.
+    /// Forward OnControllerButtonStateChanged in your plugin to RouteController.
     /// </summary>
     public static class PickerHost
     {
@@ -32,19 +33,34 @@ namespace FullscreenKit
                     return api.Dialogs.SelectFolder(); // last resort: the old dialog
                 }
             }
-            return ShowView(api, new PickerOptions { Title = title, FoldersOnly = true, StartPath = startPath });
+            return ShowView(api, new PickerOptions { Title = title, FoldersOnly = true, StartPath = startPath })?.FirstOrDefault();
         }
 
         public static string PickFile(IPlayniteAPI api, string title, string[] extensions, string startPath = null)
+        {
+            return PickFiles(api, title, extensions, startPath, false)?.FirstOrDefault();
+        }
+
+        /// <summary>Fullscreen: X marks files, Start adds all marked. Desktop: multi-select file dialog.</summary>
+        public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions,
+            string startPath = null, bool allowMultiple = true)
         {
             extensions = extensions ?? new string[0];
             if (api.ApplicationInfo.Mode == ApplicationMode.Desktop)
             {
                 var filter = extensions.Length == 0 ? "All files|*.*" :
                     "Supported files|" + string.Join(";", extensions.Select(e => "*" + e));
-                return api.Dialogs.SelectFile(filter);
+                if (allowMultiple) return api.Dialogs.SelectFiles(filter);
+                var one = api.Dialogs.SelectFile(filter);
+                return string.IsNullOrEmpty(one) ? null : new List<string> { one };
             }
-            return ShowView(api, new PickerOptions { Title = title, FoldersOnly = false, Extensions = extensions, StartPath = startPath });
+
+            var result = ShowView(api, new PickerOptions
+            {
+                Title = title, FoldersOnly = false, AllowMultiple = allowMultiple,
+                Extensions = extensions, StartPath = startPath
+            });
+            return result == null ? null : result.ToList();
         }
 
         public static void RouteController(ControllerInput button, bool pressed)
@@ -54,9 +70,9 @@ namespace FullscreenKit
             view.Dispatcher.BeginInvoke(new Action(() => view.HandleController(button, pressed)));
         }
 
-        static string ShowView(IPlayniteAPI api, PickerOptions options)
+        static IList<string> ShowView(IPlayniteAPI api, PickerOptions options)
         {
-            string result = null;
+            IList<string> result = null;
             var view = new FolderPickerView(options);
             var owner = api.Dialogs.GetCurrentAppWindow();
 
@@ -76,12 +92,12 @@ namespace FullscreenKit
             ApplyOwnerBounds(window, owner);
             window.Loaded += (s, e) =>
             {
-                ApplyOwnerBounds(window, owner); // in case the window base reset the size
+                ApplyOwnerBounds(window, owner);
                 window.Activate();
                 view.Focus();
             };
 
-            view.Done += path => { result = path; window.Close(); };
+            view.Done += paths => { result = paths; window.Close(); };
             window.Closed += (s, e) => { if (active == view) active = null; };
 
             active = view;
@@ -89,7 +105,6 @@ namespace FullscreenKit
             return result;
         }
 
-        // Cover exactly the Playnite (fullscreen) window, in DIPs, whatever the DPI.
         static void ApplyOwnerBounds(Window window, Window owner)
         {
             try

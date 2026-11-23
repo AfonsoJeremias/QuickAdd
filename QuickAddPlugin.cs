@@ -40,17 +40,27 @@ namespace QuickAdd
 
         void AddLoop()
         {
-            while (true)
+            // Fullscreen: X marks games (even across folders), Start adds all marked, A adds the highlighted one too.
+            var paths = PickerHost.PickFiles(PlayniteApi, "Add games or apps", Exts);
+            if (paths == null || paths.Count == 0) return;
+
+            int added = 0;
+            for (int i = 0; i < paths.Count; i++)
             {
-                var path = PickerHost.PickFile(PlayniteApi, "Add a game or app", Exts);
-                if (string.IsNullOrEmpty(path)) return;
-                if (!AddFromPath(path)) return;
-                var again = PlayniteApi.Dialogs.ShowMessage("Added. Add another one?", "Quick Add", MessageBoxButton.YesNo);
-                if (again != MessageBoxResult.Yes) return;
+                // One name prompt per game, in order (Cancel skips that game).
+                if (AddFromPath(paths[i], i + 1, paths.Count)) added++;
+            }
+
+            if (added > 0)
+            {
+                PlayniteApi.Notifications.Add(new NotificationMessage(
+                    Guid.NewGuid().ToString(),
+                    added == 1 ? "Quick Add: 1 game added." : "Quick Add: " + added + " games added.",
+                    NotificationType.Info));
             }
         }
 
-        bool AddFromPath(string path)
+        bool AddFromPath(string path, int index, int total)
         {
             try
             {
@@ -64,7 +74,7 @@ namespace QuickAdd
                 }
 
                 var dir = string.IsNullOrEmpty(workDir) ? Path.GetDirectoryName(target) : workDir;
-                var input = PlayniteApi.Dialogs.SelectString("Name of the game / app:", "Add game", SuggestName(path, target));
+                var input = PlayniteApi.Dialogs.SelectString(total > 1 ? "Name of the game / app (" + index + " of " + total + "):" : "Name of the game / app:", "Add game", SuggestName(path, target));
                 if (!input.Result || string.IsNullOrWhiteSpace(input.SelectedString)) return false;
                 var name = input.SelectedString.Trim();
 

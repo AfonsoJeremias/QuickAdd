@@ -3,6 +3,7 @@ using Playnite.SDK.Events;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -17,6 +18,8 @@ namespace FullscreenKit
     {
         public string Title { get; set; } = "Select";
         public bool FoldersOnly { get; set; }
+        /// <summary>File mode only: X marks files, Start confirms all marked ones.</summary>
+        public bool AllowMultiple { get; set; }
         /// <summary>File mode only. Lower-case with dot, e.g. ".exe". Empty = all files.</summary>
         public string[] Extensions { get; set; } = new string[0];
         public string StartPath { get; set; }
@@ -24,8 +27,11 @@ namespace FullscreenKit
 
     public enum PickKind { Header, Place, Drive, Up, Use, Folder, File }
 
-    public class PickItem
+    public class PickItem : INotifyPropertyChanged
     {
+        bool marked;
+        public event PropertyChangedEventHandler PropertyChanged;
+
         public PickKind Kind { get; set; }
         public string Glyph { get; set; }
         public string Text { get; set; }
@@ -35,33 +41,61 @@ namespace FullscreenKit
         public double TextSize { get { return Kind == PickKind.Header ? 14 : 22; } }
         public Brush TextBrush { get { return Kind == PickKind.Header ? Brushes.Gray : Brushes.White; } }
         public Visibility SubVisibility { get { return string.IsNullOrEmpty(Sub) ? Visibility.Collapsed : Visibility.Visible; } }
+
+        public bool Marked
+        {
+            get { return marked; }
+            set
+            {
+                marked = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MarkVisibility)));
+            }
+        }
+        public Visibility MarkVisibility { get { return marked ? Visibility.Visible : Visibility.Collapsed; } }
     }
 
-    /// <summary>Folder / file browser driven by D-pad, stick, A/B/X/Y, keyboard or mouse.</summary>
+    /// <summary>Folder / file browser driven by D-pad, stick, A/B/X/Y/Start, keyboard or mouse.</summary>
     public partial class FolderPickerView : UserControl
     {
         const int MaxFolders = 1000, MaxFiles = 500;
+        const int DuplicateWindowMs = 200;
 
-        public event Action<string> Done; // null = cancelled
+        /// <summary>Raised with the chosen paths (one entry for single picks); null = cancelled.</summary>
+        public event Action<IList<string>> Done;
 
         readonly PickerOptions opt;
         readonly ObservableCollection<PickItem> items = new ObservableCollection<PickItem>();
+        readonly List<string> marked = new List<string>();
         readonly DispatcherTimer repeat = new DispatcherTimer();
         int repeatDir;
-        int lastPadTick;
         string current; // null = places + drives
+
+        // Playnite may turn pad presses into key presses as well; the same action coming from the other
+        // source within a short window is the same press, so it is ignored.
+        string lastAction;
+        int lastActionTick;
+        bool lastFromPad;
 
         public FolderPickerView(PickerOptions options)
         {
             InitializeComponent();
             opt = options ?? new PickerOptions();
             List.ItemsSource = items;
-            TitleText.Text = opt.Title;
-            HintText.Text = opt.FoldersOnly
-                ? "A  Open      B  Back      X  Use this folder      Y  Places / drives"
-                : "A  Open / select      B  Back      Y  Places / drives      LB RB  Page";
+            RefreshTitle();
 
-            repeat.Tick += (s, e) => { repeat.Interval = TimeSpan.FromMilliseconds(70); lastPadTick = Environment.TickCount; Move(repeatDir); };
+            if (opt.FoldersOnly)
+                HintText.Text = "A  Open      B  Back      X / Start  Use this folder      Y  Places / drives";
+            else if (opt.AllowMultiple)
+                HintText.Text = "A  Open / add      X  Mark      Start  Add marked      B  Back      Y  Places / drives";
+            else
+                HintText.Text = "A  Open / select      B  Back      Y  Places / drives      LB RB  Page";
+
+            repeat.Tick += (s, e) =>
+            {
+                repeat.Interval = TimeSpan.FromMilliseconds(70);
+                IsDuplicate("move" + repeatDir, true); // keeps the duplicate window fresh while holding
+                Move(repeatDir);
+            };
             PreviewKeyDown += OnKey;
             List.MouseDoubleClick += (s, e) => Activate();
             Loaded += (s, e) => Focus();
@@ -73,23 +107,31 @@ namespace FullscreenKit
 
         // ---------- input ----------
 
+        bool IsDuplicate(string action, bool fromPad)
+        {
+            int now = Environment.TickCount;
+            bool dup = lastAction == action && lastFromPad != fromPad &&
+                       unchecked(now - lastActionTick) < DuplicateWindowMs;
+            if (!dup) { lastAction = action; lastActionTick = now; lastFromPad = fromPad; }
+            return dup;
+        }
+
         /// <summary>Called by PickerHost from Playnite's OnControllerButtonStateChanged.</summary>
         public void HandleController(ControllerInput button, bool pressed)
         {
-            lastPadTick = Environment.TickCount;
             switch (button)
             {
                 case ControllerInput.DPadUp:
                 case ControllerInput.LeftStickUp: Hold(-1, pressed); break;
                 case ControllerInput.DPadDown:
                 case ControllerInput.LeftStickDown: Hold(1, pressed); break;
-                case ControllerInput.A: if (pressed) Activate(); break;
-                case ControllerInput.B: if (pressed) GoBack(); break;
-                case ControllerInput.X:
-                case ControllerInput.Start: if (pressed && opt.FoldersOnly && current != null) Finish(current); break;
+                case ControllerInput.A: if (pressed && !IsDuplicate("activate", true)) Activate(); break;
+                case ControllerInput.B: if (pressed && !IsDuplicate("back", true)) GoBack(); break;
+                case ControllerInput.X: if (pressed && !IsDuplicate("mark", true)) MarkOrUse(); break;
+                case ControllerInput.Start: if (pressed && !IsDuplicate("confirm", true)) Confirm(); break;
                 case ControllerInput.Y: if (pressed) Navigate(null, current); break;
-                case ControllerInput.LeftShoulder: if (pressed) Move(-8); break;
-                case ControllerInput.RightShoulder: if (pressed) Move(8); break;
+                case ControllerInput.LeftShoulder: if (pressed && !IsDuplicate("move-8", true)) Move(-8); break;
+                case ControllerInput.RightShoulder: if (pressed && !IsDuplicate("move8", true)) Move(8); break;
             }
         }
 
@@ -98,7 +140,7 @@ namespace FullscreenKit
             if (pressed)
             {
                 repeatDir = dir;
-                Move(dir);
+                if (!IsDuplicate("move" + dir, true)) Move(dir);
                 repeat.Interval = TimeSpan.FromMilliseconds(400);
                 repeat.Start();
             }
@@ -110,25 +152,36 @@ namespace FullscreenKit
 
         void OnKey(object sender, KeyEventArgs e)
         {
-            // If Playnite also turns pad presses into key presses, ignore those duplicates.
-            if (unchecked(Environment.TickCount - lastPadTick) < 120) { e.Handled = true; return; }
-
+            string action;
             switch (e.Key)
             {
-                case Key.Up: Move(-1); break;
-                case Key.Down: Move(1); break;
-                case Key.PageUp: Move(-8); break;
-                case Key.PageDown: Move(8); break;
-                case Key.Enter: Activate(); break;
+                case Key.Up: action = "move-1"; break;
+                case Key.Down: action = "move1"; break;
+                case Key.PageUp: action = "move-8"; break;
+                case Key.PageDown: action = "move8"; break;
+                case Key.Enter: action = (Keyboard.Modifiers & ModifierKeys.Control) != 0 ? "confirm" : "activate"; break;
                 case Key.Escape:
-                case Key.Back: GoBack(); break;
-                case Key.Space: if (opt.FoldersOnly && current != null) Finish(current); break;
+                case Key.Back: action = "back"; break;
+                case Key.Space: action = "mark"; break;
                 default: return;
             }
             e.Handled = true;
+            if (IsDuplicate(action, false)) return;
+
+            switch (action)
+            {
+                case "move-1": Move(-1); break;
+                case "move1": Move(1); break;
+                case "move-8": Move(-8); break;
+                case "move8": Move(8); break;
+                case "activate": Activate(); break;
+                case "confirm": Confirm(); break;
+                case "back": GoBack(); break;
+                case "mark": MarkOrUse(); break;
+            }
         }
 
-        // ---------- navigation ----------
+        // ---------- actions ----------
 
         void Activate()
         {
@@ -136,11 +189,48 @@ namespace FullscreenKit
             if (it == null || !it.Selectable) return;
             switch (it.Kind)
             {
-                case PickKind.Use:
-                case PickKind.File: Finish(it.Path); break;
+                case PickKind.Use: Finish(new List<string> { it.Path }); break;
+                case PickKind.File:
+                    // A on a file = all marked files plus this one
+                    var result = new List<string>(marked);
+                    if (!result.Contains(it.Path, StringComparer.OrdinalIgnoreCase)) result.Add(it.Path);
+                    Finish(result);
+                    break;
                 case PickKind.Up: GoBack(); break;
                 default: Navigate(it.Path, null); break;
             }
+        }
+
+        // X: folder mode = use current folder; multi file mode = mark/unmark the highlighted file
+        void MarkOrUse()
+        {
+            if (opt.FoldersOnly)
+            {
+                if (current != null) Finish(new List<string> { current });
+                return;
+            }
+            var it = List.SelectedItem as PickItem;
+            if (!opt.AllowMultiple || it == null || it.Kind != PickKind.File) return;
+
+            int idx = marked.FindIndex(p => string.Equals(p, it.Path, StringComparison.OrdinalIgnoreCase));
+            if (idx >= 0) { marked.RemoveAt(idx); it.Marked = false; }
+            else { marked.Add(it.Path); it.Marked = true; }
+            RefreshTitle();
+        }
+
+        // Start: folder mode = use current folder; multi file mode = add everything marked
+        void Confirm()
+        {
+            if (opt.FoldersOnly)
+            {
+                if (current != null) Finish(new List<string> { current });
+                return;
+            }
+            if (!opt.AllowMultiple) return;
+
+            if (marked.Count > 0) { Finish(new List<string>(marked)); return; }
+            var it = List.SelectedItem as PickItem;
+            if (it != null && it.Kind == PickKind.File) Finish(new List<string> { it.Path });
         }
 
         void GoBack()
@@ -151,11 +241,18 @@ namespace FullscreenKit
             Navigate(parent, current);
         }
 
-        void Finish(string result)
+        void Finish(IList<string> result)
         {
             repeat.Stop();
             Done?.Invoke(result);
         }
+
+        void RefreshTitle()
+        {
+            TitleText.Text = opt.Title + (marked.Count > 0 ? "   ·   " + marked.Count + " marked" : "");
+        }
+
+        // ---------- navigation ----------
 
         void Navigate(string path, string focusPath)
         {
@@ -174,7 +271,6 @@ namespace FullscreenKit
             int idx = focusPath == null ? -1 : items.ToList().FindIndex(i => string.Equals(i.Path, focusPath, StringComparison.OrdinalIgnoreCase));
             if (idx < 0)
             {
-                // file mode: skip "Up" so the first folder/file is highlighted; folder mode: "Use this folder"
                 idx = items.ToList().FindIndex(i => i.Selectable && (opt.FoldersOnly || i.Kind != PickKind.Up));
                 if (idx < 0) idx = items.ToList().FindIndex(i => i.Selectable);
             }
@@ -240,7 +336,12 @@ namespace FullscreenKit
                     items.Add(new PickItem { Kind = PickKind.Folder, Glyph = "\uE8B7", Text = d.Name, Path = d.FullName });
                 if (files.Count > 0) items.Add(new PickItem { Kind = PickKind.Header, Text = "FILES" });
                 foreach (var f in files)
-                    items.Add(new PickItem { Kind = PickKind.File, Glyph = "\uE7FC", Text = f.Name, Sub = f.LastWriteTime.ToString("d MMM yyyy, HH:mm"), Path = f.FullName });
+                    items.Add(new PickItem
+                    {
+                        Kind = PickKind.File, Glyph = "\uE7FC", Text = f.Name,
+                        Sub = f.LastWriteTime.ToString("d MMM yyyy, HH:mm"), Path = f.FullName,
+                        Marked = marked.Contains(f.FullName, StringComparer.OrdinalIgnoreCase)
+                    });
             }
             else
             {
