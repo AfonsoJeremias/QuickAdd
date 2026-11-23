@@ -41,10 +41,12 @@ namespace FullscreenKit
             return PickFiles(api, title, extensions, startPath, false)?.FirstOrDefault();
         }
 
-        /// <summary>Fullscreen: X marks files, Start adds all marked. Desktop: multi-select file dialog.</summary>
+        /// <summary>Fullscreen: X marks files, Start adds all marked, Select (if allowMove) switches to Move mode.
+        /// Desktop: native multi-select file dialog (Explorer already moves files there).</summary>
         public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions,
-            string startPath = null, bool allowMultiple = true)
+            string startPath = null, bool allowMultiple = true, bool allowMove = false)
         {
+            MoveManager.Init(api);
             extensions = extensions ?? new string[0];
             if (api.ApplicationInfo.Mode == ApplicationMode.Desktop)
             {
@@ -57,7 +59,7 @@ namespace FullscreenKit
 
             var result = ShowView(api, new PickerOptions
             {
-                Title = title, FoldersOnly = false, AllowMultiple = allowMultiple,
+                Title = title, FoldersOnly = false, AllowMultiple = allowMultiple, AllowMove = allowMove,
                 Extensions = extensions, StartPath = startPath
             });
             return result == null ? null : result.ToList();

@@ -20,7 +20,7 @@ namespace QuickAdd
 
         public override Guid Id { get; } = new Guid("c1a5e0d2-7b3f-4e6a-9d18-5f2b8a4c7e91");
 
-        public QuickAddPlugin(IPlayniteAPI api) : base(api) { }
+        public QuickAddPlugin(IPlayniteAPI api) : base(api) { MoveManager.Init(api); }
 
         public override IEnumerable<MainMenuItem> GetMainMenuItems(GetMainMenuItemsArgs args)
         {
@@ -41,7 +41,7 @@ namespace QuickAdd
         void AddLoop()
         {
             // Fullscreen: X marks games (even across folders), Start adds all marked, A adds the highlighted one too.
-            var paths = PickerHost.PickFiles(PlayniteApi, "Add games or apps", Exts);
+            var paths = PickerHost.PickFiles(PlayniteApi, "Add games or apps", Exts, null, true, true);
             if (paths == null || paths.Count == 0) return;
 
             int added = 0;
