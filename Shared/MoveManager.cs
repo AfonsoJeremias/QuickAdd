@@ -118,7 +118,11 @@ namespace FullscreenKit
                 if (isDir && IsSameOrInside(destTrim, srcTrim)) { skipped++; continue; }                                       // into itself
 
                 var target = Path.Combine(job.Dest, Path.GetFileName(srcTrim));
-                if (File.Exists(target) || Directory.Exists(target)) { skipped++; continue; }                                  // name conflict
+                if (File.Exists(target) || Directory.Exists(target))
+                {
+                    if (ScanSettings.Current.MoveConflict != 1) { skipped++; continue; } // 0 = skip, 1 = keep both
+                    target = UniqueTarget(job.Dest, Path.GetFileName(srcTrim), isDir);
+                }
 
                 bool copy = !SameVolume(srcTrim, job.Dest);
                 items.Add(new Item
@@ -130,6 +134,7 @@ namespace FullscreenKit
 
             long total = items.Sum(i => i.Weight), done = 0;
             int moved = 0, failed = 0;
+            var pairs = new List<KeyValuePair<string, string>>();
             string firstError = null;
             Item last = null;
 
@@ -153,6 +158,7 @@ namespace FullscreenKit
                     done += it.Weight;
                     moved++;
                     last = it;
+                    pairs.Add(new KeyValuePair<string, string>(it.Source, it.Target));
                 }
                 catch (Exception ex)
                 {
@@ -163,9 +169,16 @@ namespace FullscreenKit
             }
             Update(items.Count, items.Count, "", total, total, true);
 
+            int libUpdated = 0;
+            if (pairs.Count > 0 && ScanSettings.Current.UpdateLibraryPaths)
+            {
+                try { libUpdated = LibraryPathUpdater.UpdateOnUi(api, pairs); } catch { }
+            }
+
             // ----- notification -----
             var destName = string.IsNullOrEmpty(Path.GetFileName(destTrim)) ? job.Dest : Path.GetFileName(destTrim);
             var skipText = skipped > 0 ? " (" + skipped + " skipped: already there, missing or name conflict)" : "";
+            if (libUpdated > 0) skipText += " - " + libUpdated + " library game(s) updated";
 
             if (failed > 0)
                 Notify("Quick Add: " + moved + " moved, " + failed + " failed - " + firstError + skipText, NotificationType.Error);
@@ -247,6 +260,19 @@ namespace FullscreenKit
         }
 
         // ----- helpers -----
+
+        static string UniqueTarget(string dest, string name, bool isDir)
+        {
+            var baseName = isDir ? name : Path.GetFileNameWithoutExtension(name);
+            var ext = isDir ? "" : Path.GetExtension(name);
+            for (int i = 2; i < 1000; i++)
+            {
+                var candidate = Path.Combine(dest, baseName + " (" + i + ")" + ext);
+                if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
+            }
+            return Path.Combine(dest, baseName + " (" + Guid.NewGuid().ToString("N").Substring(0, 6) + ")" + ext);
+        }
+
 
         static bool SameVolume(string a, string b)
         {

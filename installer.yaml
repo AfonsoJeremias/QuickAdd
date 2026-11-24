@@ -1,11 +1,12 @@
 AddonId: 'QuickAdd_FullscreenAddGame'
 Packages:
-  - Version: 1.0.0
+  - Version: 3.0.0
     RequiredApiVersion: 6.12.0
     ReleaseDate: 2026-11-23
-    PackageUrl: https://github.com/AfonsoJeremias/QuickAdd/releases/download/v1.0.0/QuickAdd_1.0.0.pext
+    PackageUrl: https://github.com/AfonsoJeremias/QuickAdd/releases/download/v3.0.0/QuickAdd_3.0.0.pext
     Changelog:
       - Initial release
-      - Controller-friendly file browser for Fullscreen mode
-      - Mark several games with X and add them all with Start
-      - Move mode with background progress bar and notifications
+      - Controller-driven file browser for Fullscreen mode with Add, Move, Scan and Rename modes
+      - Executables already in the library can't be added twice
+      - Scan finds games in folders (collections are split into one game per subfolder) with several executables per game
+      - Metadata is downloaded after adding or importing games

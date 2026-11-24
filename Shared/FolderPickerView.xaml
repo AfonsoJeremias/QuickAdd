@@ -97,6 +97,6 @@
         </StackPanel>
 
         <!-- button prompts: change with mode and page -->
-        <WrapPanel x:Name="HintPanel" Grid.Row="3" Margin="48,12,48,28"/>
+        <UniformGrid x:Name="HintPanel" Grid.Row="3" Columns="4" Margin="48,12,48,24"/>
     </Grid>
 </UserControl>

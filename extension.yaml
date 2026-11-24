@@ -1,12 +1,7 @@
 Id: QuickAdd_FullscreenAddGame
 Name: Quick Add (Fullscreen)
-Author: Afonso Jeremias
-Version: 1.0.0
+Author: AfonsoJeremias
+Version: 3.0.0
 Module: QuickAdd.dll
-Type: GenericPlugin
 Icon: icon.png
-Description: Browse drives/folders (also Desktop, Downloads, Start menu), pick an .exe/.lnk/.bat/.cmd,
-    confirm the name (Playnite's on-screen keyboard), done.
-Links:
-- Name: GitHub
-  Url: https://github.com/AfonsoJeremias/QuickAdd
+Type: GenericPlugin

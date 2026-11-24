@@ -47,27 +47,31 @@ namespace QuickAdd
         void AddLoop()
         {
             PickerHost.Configure(PlayniteApi, GetPluginUserDataPath()); // idempotent safety net
-            // Fullscreen: X marks games (even across folders), Start adds all marked, A adds the highlighted one too.
-            var paths = PickerHost.PickFiles(PlayniteApi, "Quick Add", Exts, null, true, true, true);
+            LibraryIndex.Refresh(PlayniteApi);
+
+            var paths = PickerHost.PickFiles(PlayniteApi, "Quick Add", Exts, null, true, true, true, true);
             if (paths == null || paths.Count == 0) return;
 
-            int added = 0;
+            var settings = ScanSettings.Current;
+            var added = new List<Game>();
             for (int i = 0; i < paths.Count; i++)
             {
-                // One name prompt per game, in order (Cancel skips that game).
-                if (AddFromPath(paths[i], i + 1, paths.Count)) added++;
+                var game = AddFromPath(paths[i], i + 1, paths.Count, settings.AskNamesAdd);
+                if (game != null) added.Add(game);
             }
+            if (added.Count == 0) return;
 
-            if (added > 0)
-            {
-                PlayniteApi.Notifications.Add(new NotificationMessage(
-                    Guid.NewGuid().ToString(),
-                    added == 1 ? "Quick Add: 1 game added." : "Quick Add: " + added + " games added.",
-                    NotificationType.Info));
-            }
+            Notify(added.Count == 1 ? "Quick Add: 1 game added." : "Quick Add: " + added.Count + " games added.");
+            if (settings.DownloadMetadata && !ScanManager.StartMetadata(added, settings))
+                Notify("Quick Add: metadata download skipped, another job is still running.");
         }
 
-        bool AddFromPath(string path, int index, int total)
+        void Notify(string text)
+        {
+            PlayniteApi.Notifications.Add(new NotificationMessage(Guid.NewGuid().ToString(), text, NotificationType.Info));
+        }
+
+        Game AddFromPath(string path, int index, int total, bool askName)
         {
             try
             {
@@ -80,18 +84,23 @@ namespace QuickAdd
                     }
                 }
 
-                var dir = string.IsNullOrEmpty(workDir) ? Path.GetDirectoryName(target) : workDir;
-                var input = PlayniteApi.Dialogs.SelectString(total > 1 ? "Name of the game / app (" + index + " of " + total + "):" : "Name of the game / app:", "Add game", SuggestName(path, target));
-                if (!input.Result || string.IsNullOrWhiteSpace(input.SelectedString)) return false;
-                var name = input.SelectedString.Trim();
-
-                var exists = PlayniteApi.Database.Games.Any(g => g.GameActions != null &&
-                    g.GameActions.Any(x => string.Equals(x.Path, target, StringComparison.OrdinalIgnoreCase)));
-                if (exists && PlayniteApi.Dialogs.ShowMessage(
-                        "This file is already in your library. Add it again?", "Quick Add",
-                        MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+                // the same executable can't be in the library twice
+                if (LibraryIndex.Contains(target) || LibraryIndex.Contains(path))
                 {
-                    return false;
+                    PlayniteApi.Dialogs.ShowMessage(
+                        "This executable is already present in the library and can't be added again:\n" + Path.GetFileName(target),
+                        "Quick Add");
+                    return null;
+                }
+
+                var dir = string.IsNullOrEmpty(workDir) ? Path.GetDirectoryName(target) : workDir;
+                var name = SuggestName(path, target);
+                if (askName)
+                {
+                    var message = total > 1 ? "Name of the game / app (" + index + " of " + total + "):" : "Name of the game / app:";
+                    var input = PlayniteApi.Dialogs.SelectString(message, "Add game", name);
+                    if (!input.Result || string.IsNullOrWhiteSpace(input.SelectedString)) return null; // Cancel skips this one
+                    name = input.SelectedString.Trim();
                 }
 
                 var game = new Game(name)
@@ -112,13 +121,17 @@ namespace QuickAdd
                 var pc = PlayniteApi.Database.Platforms.FirstOrDefault(p => p.SpecificationId == "pc_windows");
                 if (pc != null) game.PlatformIds = new List<Guid> { pc.Id };
 
+                var icon = SafeIconExtractor.ImportIcon(PlayniteApi, GetPluginUserDataPath(), target, game.Id);
+                if (!string.IsNullOrEmpty(icon)) game.Icon = icon;
+
                 PlayniteApi.Database.Games.Add(game);
-                return true;
+                LibraryIndex.Add(target);
+                return game;
             }
             catch (Exception ex)
             {
                 PlayniteApi.Dialogs.ShowErrorMessage(ex.Message, "Quick Add");
-                return false;
+                return null;
             }
         }
 

@@ -12,4 +12,9 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.Runtime.Serialization" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- copy the extension manifest and the icon next to QuickAdd.dll (SDK projects don't do it by themselves) -->
+    <None Update="extension.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

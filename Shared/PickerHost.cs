@@ -11,7 +11,7 @@ namespace FullscreenKit
     /// <summary>
     /// One entry point for picking folders / files.
     /// Desktop: native Windows dialogs. Fullscreen: FolderPickerView in a Playnite window sized to the Playnite window,
-    /// driven by OnControllerButtonStateChanged (Add / Move / Scan modes).
+    /// driven by OnControllerButtonStateChanged (Add / Move / Scan / Rename modes).
     /// Call Configure once, and forward OnControllerButtonStateChanged to RouteController.
     /// </summary>
     public static class PickerHost
@@ -35,10 +35,7 @@ namespace FullscreenKit
                     var handle = owner != null ? new WindowInteropHelper(owner).Handle : IntPtr.Zero;
                     return ModernFolderDialog.Show(handle, title, startPath);
                 }
-                catch
-                {
-                    return api.Dialogs.SelectFolder();
-                }
+                catch { return api.Dialogs.SelectFolder(); }
             }
             return ShowView(api, new PickerOptions { Title = title, FoldersOnly = true, StartPath = startPath })?.FirstOrDefault();
         }
@@ -49,11 +46,11 @@ namespace FullscreenKit
         }
 
         /// <summary>
-        /// Fullscreen: X marks files, Start adds the marked ones. allowMove / allowScan enable the Move and Scan modes
-        /// (switch with left/right). Desktop: native multi-select file dialog.
+        /// Fullscreen: X marks files, Start adds the marked ones; allowMove / allowScan / allowRename enable the other
+        /// modes (switch with left/right). Desktop: native multi-select file dialog.
         /// </summary>
-        public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions,
-            string startPath = null, bool allowMultiple = true, bool allowMove = false, bool allowScan = false)
+        public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions, string startPath = null,
+            bool allowMultiple = true, bool allowMove = false, bool allowScan = false, bool allowRename = false)
         {
             extensions = extensions ?? new string[0];
             if (api.ApplicationInfo.Mode == ApplicationMode.Desktop)
@@ -65,10 +62,13 @@ namespace FullscreenKit
                 return string.IsNullOrEmpty(one) ? null : new List<string> { one };
             }
 
+            var settings = ScanSettings.Current;
+            if (string.IsNullOrEmpty(startPath) && settings.RememberLastFolder) startPath = settings.LastFolder;
+
             var result = ShowView(api, new PickerOptions
             {
                 Title = title, FoldersOnly = false, AllowMultiple = allowMultiple,
-                AllowMove = allowMove, AllowScan = allowScan,
+                AllowMove = allowMove, AllowScan = allowScan, AllowRename = allowRename,
                 Extensions = extensions, StartPath = startPath
             });
             return result == null ? null : result.ToList();
@@ -83,12 +83,18 @@ namespace FullscreenKit
 
         static IList<string> ShowView(IPlayniteAPI api, PickerOptions options)
         {
-            // text prompts (rename, edit patterns) use Playnite's own dialog, which has the on-screen keyboard
+            LibraryIndex.Refresh(api);
+
+            // delegates the view uses (it never touches the Playnite API directly)
             options.PromptText = (message, caption, defaultText) =>
             {
                 var r = api.Dialogs.SelectString(message, caption, defaultText ?? "");
                 return r.Result ? r.SelectedString : null;
             };
+            options.IsInLibrary = LibraryIndex.Contains;
+            options.UpdateLibrary = moves => LibraryPathUpdater.Update(api, moves);
+            options.Notify = text => Notifier.Send(api, text, NotificationType.Info);
+            options.MetadataSources = () => MetadataFetcher.SourceNames(api);
 
             IList<string> result = null;
             var view = new FolderPickerView(options);
@@ -96,9 +102,7 @@ namespace FullscreenKit
 
             var window = api.Dialogs.CreateWindow(new WindowCreationOptions
             {
-                ShowMinimizeButton = false,
-                ShowMaximizeButton = false,
-                ShowCloseButton = false
+                ShowMinimizeButton = false, ShowMaximizeButton = false, ShowCloseButton = false
             });
             window.Title = options.Title;
             window.Owner = owner;
@@ -120,6 +124,7 @@ namespace FullscreenKit
 
             active = view;
             window.ShowDialog();
+            ScanSettings.Current.Save();
             return result;
         }
 
@@ -128,11 +133,7 @@ namespace FullscreenKit
             try
             {
                 var source = owner != null ? PresentationSource.FromVisual(owner) : null;
-                if (source == null || owner.ActualWidth < 1)
-                {
-                    window.WindowState = WindowState.Maximized;
-                    return;
-                }
+                if (source == null || owner.ActualWidth < 1) { window.WindowState = WindowState.Maximized; return; }
                 var topLeft = source.CompositionTarget.TransformFromDevice.Transform(owner.PointToScreen(new Point(0, 0)));
                 window.WindowState = WindowState.Normal;
                 window.Left = topLeft.X;
@@ -140,10 +141,7 @@ namespace FullscreenKit
                 window.Width = owner.ActualWidth;
                 window.Height = owner.ActualHeight;
             }
-            catch
-            {
-                window.WindowState = WindowState.Maximized;
-            }
+            catch { window.WindowState = WindowState.Maximized; }
         }
     }
 }

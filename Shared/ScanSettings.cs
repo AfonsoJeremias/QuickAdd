@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 
 namespace FullscreenKit
 {
-    /// <summary>Scan + browsing options, saved as scan-settings.json in the plugin's data folder.</summary>
+    /// <summary>All Quick Add options, saved as scan-settings.json in the plugin's data folder.</summary>
     [DataContract]
     public class ScanSettings
     {
@@ -17,6 +17,7 @@ namespace FullscreenKit
             "unins*;uninstall*;*setup*;install*;vc_redist*;vcredist*;dxsetup*;dotnetfx*;ndp*;oalinst*;physx*;directx*;" +
             "*crashhandler*;*crashreport*;crashpad*;*redist*;*updater*";
 
+        // scan
         [DataMember] public bool FolderPerGame { get; set; }
         [DataMember] public int Depth { get; set; }
         [DataMember] public bool NameFromFolder { get; set; }
@@ -25,8 +26,21 @@ namespace FullscreenKit
         [DataMember] public bool HideExisting { get; set; }
         [DataMember] public bool RelativePaths { get; set; }
         [DataMember] public List<string> SavedRoots { get; set; }
+        [DataMember] public bool AskNamesScan { get; set; }
+        // browsing
         [DataMember] public int SortBy { get; set; }          // 0 name, 1 date, 2 size
         [DataMember] public bool SortDescending { get; set; }
+        [DataMember] public bool ShowHidden { get; set; }
+        [DataMember] public bool RememberLastFolder { get; set; }
+        [DataMember] public string LastFolder { get; set; }
+        // add
+        [DataMember] public bool AskNamesAdd { get; set; }
+        [DataMember] public bool DownloadMetadata { get; set; }
+        [DataMember] public string MetadataSource { get; set; }   // "" = all metadata plugins, IGDB first
+        // move / rename
+        [DataMember] public bool UpdateLibraryPaths { get; set; }
+        [DataMember] public int MoveConflict { get; set; }        // 0 skip, 1 keep both
+        [DataMember] public bool KeepExtension { get; set; }
 
         static ScanSettings current = new ScanSettings();
         static string path;
@@ -39,16 +53,22 @@ namespace FullscreenKit
 
         public void SetDefaults()
         {
-            FolderPerGame = true;
-            Depth = 2;
-            NameFromFolder = true;
-            Include = DefaultInclude;
-            Exclude = DefaultExclude;
-            HideExisting = true;
-            RelativePaths = false;
-            SavedRoots = new List<string>();
-            SortBy = 0;
-            SortDescending = false;
+            FolderPerGame = true; Depth = 2; NameFromFolder = true;
+            Include = DefaultInclude; Exclude = DefaultExclude;
+            HideExisting = true; RelativePaths = false;
+            SavedRoots = new List<string>(); AskNamesScan = false;
+            SortBy = 0; SortDescending = false; ShowHidden = false;
+            RememberLastFolder = true; LastFolder = "";
+            AskNamesAdd = true; DownloadMetadata = true; MetadataSource = "";
+            UpdateLibraryPaths = true; MoveConflict = 0; KeepExtension = true;
+        }
+
+        /// <summary>Resets the options but keeps saved folders and the last folder.</summary>
+        public void ResetOptions()
+        {
+            var roots = SavedRoots; var last = LastFolder;
+            SetDefaults();
+            SavedRoots = roots ?? new List<string>(); LastFolder = last;
         }
 
         public ScanSettings Clone()
@@ -68,20 +88,18 @@ namespace FullscreenKit
             try
             {
                 Directory.CreateDirectory(dir);
-                if (File.Exists(path))
+                if (!File.Exists(path)) return;
+                using (var fs = File.OpenRead(path))
                 {
-                    using (var fs = File.OpenRead(path))
-                    {
-                        var o = new DataContractJsonSerializer(typeof(ScanSettings)).ReadObject(fs) as ScanSettings;
-                        if (o != null)
-                        {
-                            if (o.Depth < 1 || o.Depth > 4) o.Depth = 2;
-                            if (string.IsNullOrWhiteSpace(o.Include)) o.Include = DefaultInclude;
-                            if (o.Exclude == null) o.Exclude = DefaultExclude;
-                            if (o.SavedRoots == null) o.SavedRoots = new List<string>();
-                            current = o;
-                        }
-                    }
+                    var o = new DataContractJsonSerializer(typeof(ScanSettings)).ReadObject(fs) as ScanSettings;
+                    if (o == null) return;
+                    if (o.Depth < 1 || o.Depth > 4) o.Depth = 2;
+                    if (string.IsNullOrWhiteSpace(o.Include)) o.Include = DefaultInclude;
+                    if (o.Exclude == null) o.Exclude = DefaultExclude;
+                    if (o.SavedRoots == null) o.SavedRoots = new List<string>();
+                    if (o.MetadataSource == null) o.MetadataSource = "";
+                    if (o.LastFolder == null) o.LastFolder = "";
+                    current = o;
                 }
             }
             catch { }

@@ -1,11 +1,15 @@
-name: Build
+name: Build and release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build and release (for example 1.2.0)'
+        required: true
+        type: string
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,6 +17,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      INPUT_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,13 +26,17 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Set version
+      - name: Resolve version
         shell: pwsh
         run: |
-          $v = "1.0.0"
-          if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') }
-          (Get-Content extension.yaml) -replace '^Version:.*', "Version: $v" | Set-Content extension.yaml
+          $v = "$env:INPUT_VERSION".Trim().TrimStart('v')
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "The version must look like 1.2.3 (got '$v')." }
+          } else {
+            $v = '0.0.0'   # push / pull request builds are only a compile check
+          }
           "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+          (Get-Content extension.yaml) -replace '^Version:.*', "Version: $v" | Set-Content extension.yaml
 
       - name: Build
         run: dotnet build QuickAdd.csproj -c Release -o out
@@ -35,17 +45,25 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path pkg | Out-Null
-          Copy-Item out/QuickAdd.dll, extension.yaml -Destination pkg/
-          Compress-Archive -Path pkg/* -DestinationPath "QuickAdd_$($env:VERSION).zip"
-          Rename-Item "QuickAdd_$($env:VERSION).zip" "QuickAdd_$($env:VERSION).pext"
+          Copy-Item out/QuickAdd.dll pkg/
+          Copy-Item extension.yaml pkg/
+          if (Test-Path icon.png) { Copy-Item icon.png pkg/ } else { Write-Warning "icon.png was not found, the extension will have no icon." }
+          $pext = "QuickAdd_$($env:VERSION).pext"
+          Compress-Archive -Path pkg/* -DestinationPath QuickAdd.zip -Force
+          Rename-Item QuickAdd.zip $pext
+          "PEXT=$pext" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - uses: actions/upload-artifact@v4
         with:
-          name: QuickAdd-pext
-          path: '*.pext'
+          name: ${{ env.PEXT }}
+          path: ${{ env.PEXT }}
 
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          files: '*.pext'
+          tag_name: v${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          files: ${{ env.PEXT }}
+          generate_release_notes: true
