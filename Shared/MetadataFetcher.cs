@@ -36,7 +36,7 @@ namespace FullscreenKit
 
         public static List<string> SourceNames(IPlayniteAPI api)
         {
-            try { return api.Addons.Plugins.Select(p => p.Plugin).OfType<MetadataPlugin>().Select(p => p.Name).Distinct().OrderBy(n => n).ToList(); }
+            try { return api.Addons.Plugins.OfType<MetadataPlugin>().Select(p => p.Name).Distinct().OrderBy(n => n).ToList(); }
             catch { return new List<string>(); }
         }
 
@@ -47,7 +47,7 @@ namespace FullscreenKit
             List<MetadataPlugin> plugins;
             try
             {
-                plugins = api.Addons.Plugins.Select(p => p.Plugin).OfType<MetadataPlugin>()
+                plugins = api.Addons.Plugins.OfType<MetadataPlugin>()
                     .Where(p => string.IsNullOrEmpty(source) || p.Name == source)
                     .OrderBy(p => p.Name == "IGDB" ? 0 : 1).ToList();
             }
