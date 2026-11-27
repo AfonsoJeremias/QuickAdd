@@ -89,7 +89,7 @@ namespace QuickAdd.UI
         }
 
         /// <summary>Returns true if the key was a picker key (and marks it handled).</summary>
-        public bool Key(KeyEventArgs e)
+        public bool HandleKey(KeyEventArgs e)
         {
             PickerCommand c;
             switch (e.Key)

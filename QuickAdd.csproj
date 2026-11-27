@@ -22,5 +22,9 @@
     <Compile Remove="QuickAddPlugin.cs" />
     <Compile Remove="Shared\**" />
     <Page Remove="Shared\**" />
+    <!-- removed in this version: the Scan mode. Old copies are ignored if they are still in the repository -->
+    <Compile Remove="src\Services\ScanService.cs" />
+    <Compile Remove="src\Services\NameService.cs" />
+    <Compile Remove="src\UI\Pages\ScanResultPages.cs" />
   </ItemGroup>
 </Project>

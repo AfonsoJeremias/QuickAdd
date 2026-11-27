@@ -13,7 +13,7 @@ namespace QuickAdd.UI
             ViewModel = viewModel;
             DataContext = viewModel;
 
-            PreviewKeyDown += (s, e) => ViewModel.Input.Key(e);
+            PreviewKeyDown += (s, e) => ViewModel.Input.HandleKey(e);
             List.MouseDoubleClick += (s, e) => ViewModel.Execute(PickerCommand.Accept);
             Loaded += (s, e) => { Focus(); ViewModel.Attach(); };
             Unloaded += (s, e) => { ViewModel.Input.Stop(); ViewModel.Detach(); };
