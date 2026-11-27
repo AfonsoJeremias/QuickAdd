@@ -1,7 +1,7 @@
 Id: QuickAdd_FullscreenAddGame
 Name: Quick Add (Fullscreen)
-Author: AfonsoJeremias
-Version: 4.0.0
+Author: Afonso Jeremias
+Version: 1.0.0
 Module: QuickAdd.dll
 Icon: icon.png
 Type: GenericPlugin
