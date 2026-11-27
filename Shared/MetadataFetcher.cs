@@ -26,7 +26,7 @@ namespace FullscreenKit
             public List<MetadataProperty> Genres, Developers, Publishers, Tags, Features, Series;
             public List<Link> Links;
             public ReleaseDate? Date;
-            public int? Community, Critic, User;
+            public int? Community, Critic;
 
             public bool HasAnything
             {
@@ -34,7 +34,7 @@ namespace FullscreenKit
                 {
                     return !string.IsNullOrWhiteSpace(Description) || Cover != null || Background != null || Icon != null ||
                            Genres != null || Developers != null || Publishers != null || Tags != null || Features != null ||
-                           Series != null || Links != null || Date != null || Community != null || Critic != null || User != null;
+                           Series != null || Links != null || Date != null || Community != null || Critic != null;
                 }
             }
         }
@@ -128,15 +128,13 @@ namespace FullscreenKit
                 f.Date = Safe(() => p.GetReleaseDate(args));
             if (f.Links == null && (game.Links == null || game.Links.Count == 0) && fields.Contains(MetadataField.Links))
             {
-                var links = Safe(() => p.GetLinks(args));
+                var links = Safe(() => p.GetLinks(args))?.ToList();
                 if (links != null && links.Count > 0) f.Links = links;
             }
             if (f.Community == null && game.CommunityScore == null && fields.Contains(MetadataField.CommunityScore))
                 f.Community = Safe(() => p.GetCommunityScore(args));
             if (f.Critic == null && game.CriticScore == null && fields.Contains(MetadataField.CriticScore))
                 f.Critic = Safe(() => p.GetCriticScore(args));
-            if (f.User == null && game.UserScore == null && fields.Contains(MetadataField.UserScore))
-                f.User = Safe(() => p.GetUserScore(args));
         }
 
         static bool StillMissing(Game game, Fetched f)
@@ -211,7 +209,6 @@ namespace FullscreenKit
             if (f.Links != null && (game.Links == null || game.Links.Count == 0)) { game.Links = new ObservableCollection<Link>(f.Links); changed = true; }
             if (f.Community != null && game.CommunityScore == null) { game.CommunityScore = f.Community; changed = true; }
             if (f.Critic != null && game.CriticScore == null) { game.CriticScore = f.Critic; changed = true; }
-            if (f.User != null && game.UserScore == null) { game.UserScore = f.User; changed = true; }
             return changed;
         }
 

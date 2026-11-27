@@ -18,13 +18,13 @@
     <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <!-- if files of the other layout are still in the repository, ignore them -->
-    <Compile Remove="QuickAddPlugin.cs" />
-    <Compile Remove="Shared\**" />
-    <Page Remove="Shared\**" />
+    <!-- if the files of the alternative layout are still in the repository, ignore them -->
+    <Compile Remove="src\**" />
+    <Page Remove="src\**" />
     <!-- removed in this version: the Scan mode. Old copies are ignored if they are still in the repository -->
-    <Compile Remove="src\Services\ScanService.cs" />
-    <Compile Remove="src\Services\NameService.cs" />
-    <Compile Remove="src\UI\Pages\ScanResultPages.cs" />
+    <Compile Remove="Shared\ScanManager.cs" />
+    <Compile Remove="Shared\ScanSettings.cs" />
+    <Compile Remove="Shared\NameCleaner.cs" />
+    <Compile Remove="Shared\FolderPickerView.Scan.cs" />
   </ItemGroup>
 </Project>
