@@ -18,8 +18,9 @@
     <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
-    <!-- if the files of the alternative layout are still in the repository, ignore them -->
-    <Compile Remove="src\**" />
-    <Page Remove="src\**" />
+    <!-- if files of the other layout are still in the repository, ignore them -->
+    <Compile Remove="QuickAddPlugin.cs" />
+    <Compile Remove="Shared\**" />
+    <Page Remove="Shared\**" />
   </ItemGroup>
 </Project>
