@@ -11,18 +11,20 @@ namespace FullscreenKit
     /// <summary>
     /// One entry point for picking folders / files.
     /// Desktop: native Windows dialogs. Fullscreen: FolderPickerView in a Playnite window sized to the Playnite window,
-    /// driven by OnControllerButtonStateChanged (Add / Move / Scan / Rename modes).
+    /// driven by OnControllerButtonStateChanged (Add / Move / Rename modes).
     /// Call Configure once, and forward OnControllerButtonStateChanged to RouteController.
     /// </summary>
     public static class PickerHost
     {
         static FolderPickerView active;
+        static bool dialogOpen;
+        static int dialogClosedTick = unchecked(Environment.TickCount - 10000);
 
         public static void Configure(IPlayniteAPI api, string dataDirectory)
         {
             MoveManager.Init(api);
-            ScanManager.Init(api, dataDirectory);
-            ScanSettings.Load(dataDirectory); // no-op after the first call
+            MetadataManager.Init(api, dataDirectory);
+            QuickSettings.Load(dataDirectory); // no-op after the first call
         }
 
         public static string PickFolder(IPlayniteAPI api, string title, string startPath = null)
@@ -46,11 +48,11 @@ namespace FullscreenKit
         }
 
         /// <summary>
-        /// Fullscreen: X marks files, Start adds the marked ones; allowMove / allowScan / allowRename enable the other
-        /// modes (switch with left/right). Desktop: native multi-select file dialog.
+        /// Fullscreen: X marks files, Start adds the marked ones; allowMove / allowRename enable the other modes
+        /// (switch with left/right). Desktop: native multi-select file dialog.
         /// </summary>
         public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions, string startPath = null,
-            bool allowMultiple = true, bool allowMove = false, bool allowScan = false, bool allowRename = false)
+            bool allowMultiple = true, bool allowMove = false, bool allowRename = false)
         {
             extensions = extensions ?? new string[0];
             if (api.ApplicationInfo.Mode == ApplicationMode.Desktop)
@@ -62,13 +64,13 @@ namespace FullscreenKit
                 return string.IsNullOrEmpty(one) ? null : new List<string> { one };
             }
 
-            var settings = ScanSettings.Current;
+            var settings = QuickSettings.Current;
             if (string.IsNullOrEmpty(startPath) && settings.RememberLastFolder) startPath = settings.LastFolder;
 
             var result = ShowView(api, new PickerOptions
             {
                 Title = title, FoldersOnly = false, AllowMultiple = allowMultiple,
-                AllowMove = allowMove, AllowScan = allowScan, AllowRename = allowRename,
+                AllowMove = allowMove, AllowRename = allowRename,
                 Extensions = extensions, StartPath = startPath
             });
             return result == null ? null : result.ToList();
@@ -76,6 +78,8 @@ namespace FullscreenKit
 
         public static void RouteController(ControllerInput button, bool pressed)
         {
+            // while Playnite's on-screen keyboard / dialog is open the pad belongs to it, not to the picker
+            if (dialogOpen || unchecked(Environment.TickCount - dialogClosedTick) < 400) return;
             var view = active;
             if (view == null) return;
             view.Dispatcher.BeginInvoke(new Action(() => view.HandleController(button, pressed)));
@@ -88,8 +92,14 @@ namespace FullscreenKit
             // delegates the view uses (it never touches the Playnite API directly)
             options.PromptText = (message, caption, defaultText) =>
             {
-                var r = api.Dialogs.SelectString(message, caption, defaultText ?? "");
-                return r.Result ? r.SelectedString : null;
+                active?.StopRepeat();
+                dialogOpen = true;
+                try
+                {
+                    var r = api.Dialogs.SelectString(message, caption, defaultText ?? "");
+                    return r.Result ? r.SelectedString : null;
+                }
+                finally { dialogOpen = false; dialogClosedTick = Environment.TickCount; }
             };
             options.IsInLibrary = LibraryIndex.Contains;
             options.UpdateLibrary = moves => LibraryPathUpdater.Update(api, moves);
@@ -124,7 +134,7 @@ namespace FullscreenKit
 
             active = view;
             window.ShowDialog();
-            ScanSettings.Current.Save();
+            QuickSettings.Current.Save();
             return result;
         }
 

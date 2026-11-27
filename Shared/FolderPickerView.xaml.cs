@@ -21,7 +21,6 @@ namespace FullscreenKit
         /// <summary>File mode: X marks files, Start confirms all marked ones (also enables Select = options).</summary>
         public bool AllowMultiple { get; set; }
         public bool AllowMove { get; set; }
-        public bool AllowScan { get; set; }
         public bool AllowRename { get; set; }
         /// <summary>Add mode only. Lower-case with dot, e.g. ".exe". Empty = all files.</summary>
         public string[] Extensions { get; set; } = new string[0];
@@ -37,9 +36,9 @@ namespace FullscreenKit
         public Func<List<string>> MetadataSources { get; set; }
     }
 
-    public enum PickKind { Header, Place, Drive, Up, Use, Folder, File, Action, Saved, Candidate, Alt, Option }
-    public enum PickMode { Add, Move, Scan, Rename }
-    public enum PickPage { Browse, Results, Alternatives, Options }
+    public enum PickKind { Header, Place, Drive, Up, Use, Folder, File, Option }
+    public enum PickMode { Add, Move, Rename }
+    public enum PickPage { Browse, Options }
 
     public class PickItem : INotifyPropertyChanged
     {
@@ -68,17 +67,17 @@ namespace FullscreenKit
     }
 
     /// <summary>
-    /// Controller-driven browser with four modes (switch with left/right): Add, Move, Scan and Rename.
+    /// Controller-driven browser with three modes (switch with left/right): Add, Move and Rename.
     /// Select = options of the current mode.
     /// </summary>
     public partial class FolderPickerView : UserControl
     {
         const int MaxFolders = 1000, MaxFiles = 500, MaxFilesBig = 3000;
         const int DuplicateWindowMs = 200, StickCooldownMs = 300;
+        const string InLibraryMessage = "This executable is already in your library - it can't be added again.";
 
         static readonly Brush AddColor = new SolidColorBrush(Color.FromRgb(0x2F, 0x7D, 0xD1));
         static readonly Brush MoveColor = new SolidColorBrush(Color.FromRgb(0xE0, 0x8A, 0x1E));
-        static readonly Brush ScanColor = new SolidColorBrush(Color.FromRgb(0x2F, 0xA3, 0x6B));
         static readonly Brush RenameColor = new SolidColorBrush(Color.FromRgb(0x9B, 0x5D, 0xD1));
         static readonly Brush KeyCapColor = new SolidColorBrush(Color.FromRgb(0x2A, 0x31, 0x38));
         static readonly Brush HintColor = new SolidColorBrush(Color.FromRgb(0xA0, 0xA8, 0xB0));
@@ -97,7 +96,6 @@ namespace FullscreenKit
         readonly ObservableCollection<PickItem> items = new ObservableCollection<PickItem>();
         readonly List<string> markedAdd = new List<string>();
         readonly List<string> markedMove = new List<string>();
-        readonly List<string> markedScan = new List<string>();
         readonly List<string> markedRename = new List<string>();
         readonly List<PickMode> modes = new List<PickMode>();
         readonly DispatcherTimer repeat = new DispatcherTimer();
@@ -106,10 +104,7 @@ namespace FullscreenKit
         int repeatDir;
         PickMode mode = PickMode.Add;
         PickPage page = PickPage.Browse;
-        PickPage optionsReturn = PickPage.Browse;
-        ScanCandidate altFor;
         string current; // null = places + drives
-        int seenResultsVersion;
         int lastVerticalTick;
 
         string lastAction;
@@ -123,27 +118,23 @@ namespace FullscreenKit
                 switch (mode)
                 {
                     case PickMode.Move: return markedMove;
-                    case PickMode.Scan: return markedScan;
                     case PickMode.Rename: return markedRename;
                     default: return markedAdd;
                 }
             }
         }
 
-        static ScanSettings Settings { get { return ScanSettings.Current; } }
+        static QuickSettings Settings { get { return QuickSettings.Current; } }
 
         public FolderPickerView(PickerOptions options)
         {
             InitializeComponent();
             opt = options ?? new PickerOptions();
-            if (opt.FoldersOnly) { opt.AllowMultiple = false; }
-            if (!opt.AllowMultiple) { opt.AllowMove = false; opt.AllowScan = false; opt.AllowRename = false; }
+            if (!opt.AllowMultiple || opt.FoldersOnly) { opt.AllowMove = false; opt.AllowRename = false; }
 
             modes.Add(PickMode.Add);
             if (opt.AllowMove) modes.Add(PickMode.Move);
-            if (opt.AllowScan) modes.Add(PickMode.Scan);
             if (opt.AllowRename) modes.Add(PickMode.Rename);
-            seenResultsVersion = ScanManager.ResultsVersion;
 
             List.ItemsSource = items;
             UpdateModeUi();
@@ -163,7 +154,7 @@ namespace FullscreenKit
             {
                 Focus();
                 MoveManager.Changed -= OnJobsChanged; MoveManager.Changed += OnJobsChanged;
-                ScanManager.Changed -= OnJobsChanged; ScanManager.Changed += OnJobsChanged;
+                MetadataManager.Changed -= OnJobsChanged; MetadataManager.Changed += OnJobsChanged;
                 UpdateProgress();
             };
             Unloaded += (s, e) => { repeat.Stop(); Unsubscribe(); };
@@ -175,8 +166,11 @@ namespace FullscreenKit
         void Unsubscribe()
         {
             MoveManager.Changed -= OnJobsChanged;
-            ScanManager.Changed -= OnJobsChanged;
+            MetadataManager.Changed -= OnJobsChanged;
         }
+
+        /// <summary>Stops a held direction (used when Playnite's on-screen keyboard takes over the pad).</summary>
+        public void StopRepeat() { repeat.Stop(); }
 
         // ---------- input ----------
 
@@ -215,8 +209,6 @@ namespace FullscreenKit
                 case ControllerInput.Y: if (pressed && !IsDuplicate("y", true)) YAction(); break;
                 case ControllerInput.Start: if (pressed && !IsDuplicate("confirm", true)) Confirm(); break;
                 case ControllerInput.Back: if (pressed && !IsDuplicate("options", true)) ToggleOptions(); break; // Select / View
-                case ControllerInput.TriggerLeft: if (pressed && !IsDuplicate("none", true)) SelectAllResults(false); break;
-                case ControllerInput.TriggerRight: if (pressed && !IsDuplicate("all", true)) SelectAllResults(true); break;
                 case ControllerInput.LeftShoulder: if (pressed && !IsDuplicate("move-8", true)) Move(-8); break;
                 case ControllerInput.RightShoulder: if (pressed && !IsDuplicate("move8", true)) Move(8); break;
             }
@@ -252,8 +244,6 @@ namespace FullscreenKit
                 case Key.Space: action = "mark"; break;
                 case Key.Y: action = "y"; break;
                 case Key.F2: action = "options"; break;
-                case Key.Insert: action = "all"; break;
-                case Key.Delete: action = "none"; break;
                 default: return;
             }
             e.Handled = true;
@@ -273,28 +263,16 @@ namespace FullscreenKit
                 case "mark": MarkOrUse(); break;
                 case "y": YAction(); break;
                 case "options": ToggleOptions(); break;
-                case "all": SelectAllResults(true); break;
-                case "none": SelectAllResults(false); break;
             }
         }
 
         // ---------- actions ----------
 
-        const string InLibraryMessage = "This executable is already in your library - it can't be added again.";
-
         void Activate()
         {
             var it = List.SelectedItem as PickItem;
             if (it == null || !it.Selectable) return;
-
-            switch (page)
-            {
-                case PickPage.Results:
-                    if (it.Kind == PickKind.Up) GoBack(); else ShowAlternatives(it.Data as ScanCandidate, -1);
-                    return;
-                case PickPage.Alternatives: ChooseMain(it); return;
-                case PickPage.Options: ChangeOption(it); return;
-            }
+            if (page == PickPage.Options) { ChangeOption(it); return; }
 
             switch (it.Kind)
             {
@@ -307,37 +285,15 @@ namespace FullscreenKit
                     Finish(result);
                     break;
                 case PickKind.Up: GoBack(); break;
-                case PickKind.Action: RunAction(it); break;
-                default: Navigate(it.Path, null); break; // Place, Drive, Folder, Saved
+                default: Navigate(it.Path, null); break; // Place, Drive, Folder
             }
         }
 
-        void RunAction(PickItem it)
-        {
-            switch (it.Tag)
-            {
-                case "scanhere": if (current != null) StartScan(new List<string> { current }); break;
-                case "scanall": StartScan(SavedRoots()); break;
-                case "results": ShowResults(null); break;
-            }
-        }
-
-        // X: Results = select/unselect game; Alternatives = include/exclude executable; Browse = mark for the current mode
+        // X: folder mode = use folder; otherwise mark for the current mode
         void MarkOrUse()
         {
-            var it = List.SelectedItem as PickItem;
-
-            if (page == PickPage.Results)
-            {
-                var c = it == null ? null : it.Data as ScanCandidate;
-                if (c == null) return;
-                c.Selected = !c.Selected;
-                it.Marked = c.Selected;
-                RefreshTitle();
-                return;
-            }
-            if (page == PickPage.Alternatives) { ToggleExtra(it); return; }
             if (page != PickPage.Browse) return;
+            var it = List.SelectedItem as PickItem;
 
             if (opt.FoldersOnly)
             {
@@ -352,12 +308,8 @@ namespace FullscreenKit
                     if (!opt.AllowMultiple || it.Kind != PickKind.File) return;
                     if (it.Tag == "inlib") { ShowToast(InLibraryMessage); return; }
                     break;
-                case PickMode.Move:
-                case PickMode.Rename:
+                default:
                     if (it.Kind != PickKind.Folder && it.Kind != PickKind.File) return;
-                    break;
-                case PickMode.Scan:
-                    if (it.Kind != PickKind.Folder && it.Kind != PickKind.Saved) return;
                     break;
             }
 
@@ -368,10 +320,9 @@ namespace FullscreenKit
             RefreshTitle();
         }
 
-        // Start: Results = import; folder mode = use folder; Add = add marked; Move = move here; Scan = scan; Rename = rename
+        // Start: folder mode = use folder; Add = add marked; Move = move here; Rename = rename
         void Confirm()
         {
-            if (page == PickPage.Results) { ImportSelected(); return; }
             if (page != PickPage.Browse) return;
 
             if (opt.FoldersOnly)
@@ -381,13 +332,6 @@ namespace FullscreenKit
             }
             if (mode == PickMode.Move) { StartMove(); return; }
             if (mode == PickMode.Rename) { StartRename(); return; }
-            if (mode == PickMode.Scan)
-            {
-                if (markedScan.Count > 0) StartScan(markedScan.ToList());
-                else if (current != null) StartScan(new List<string> { current });
-                else StartScan(SavedRoots());
-                return;
-            }
             if (!opt.AllowMultiple) return;
 
             if (markedAdd.Count > 0) { Finish(new List<string>(markedAdd)); return; }
@@ -401,8 +345,7 @@ namespace FullscreenKit
 
         void YAction()
         {
-            if (page == PickPage.Results) Rename();
-            else if (page == PickPage.Browse) Navigate(null, current);
+            if (page == PickPage.Browse) Navigate(null, current);
         }
 
         void StartMove()
@@ -431,22 +374,17 @@ namespace FullscreenKit
 
         void CycleMode(int dir)
         {
-            if (modes.Count < 2 || page == PickPage.Alternatives || page == PickPage.Options) return;
+            if (modes.Count < 2 || page == PickPage.Options) return;
             int i = modes.IndexOf(mode);
             mode = modes[(i + dir + modes.Count) % modes.Count];
             var focus = (List.SelectedItem as PickItem)?.Path;
             UpdateModeUi();
-            Navigate(current, focus); // also returns to the Browse page
+            Navigate(current, focus);
         }
 
         void GoBack()
         {
-            switch (page)
-            {
-                case PickPage.Results: Navigate(current, null); UpdateModeUi(); return;
-                case PickPage.Alternatives: ShowResults(altFor); return;
-                case PickPage.Options: CloseOptions(); return;
-            }
+            if (page == PickPage.Options) { CloseOptions(); return; }
 
             if (current == null) { Finish(null); return; }
             string parent = null;
@@ -476,7 +414,6 @@ namespace FullscreenKit
             switch (m)
             {
                 case PickMode.Move: return MoveColor;
-                case PickMode.Scan: return ScanColor;
                 case PickMode.Rename: return RenameColor;
                 default: return AddColor;
             }
@@ -516,21 +453,14 @@ namespace FullscreenKit
         void RefreshTitle()
         {
             string t = opt.Title;
-            if (page == PickPage.Results)
-            {
-                var r = ScanManager.GetResults();
-                t += "   ·   " + r.Count + " found, " + r.Count(c => c.Selected) + " selected";
-            }
-            else if (page == PickPage.Alternatives) t += "   ·   Executables";
-            else if (page == PickPage.Options) t += "   ·   Options";
+            if (page == PickPage.Options) t += "   ·   Options";
             else
             {
                 int n = Marks.Count;
-                if (n > 0)
-                    t += "   ·   " + n + (mode == PickMode.Move ? " to move" : mode == PickMode.Scan ? " to scan" : mode == PickMode.Rename ? " to rename" : " marked");
+                if (n > 0) t += "   ·   " + n + (mode == PickMode.Move ? " to move" : mode == PickMode.Rename ? " to rename" : " marked");
             }
             TitleText.Text = t;
-            if (page == PickPage.Browse && (mode == PickMode.Scan || mode == PickMode.Rename)) RenderHints(); // Start's label depends on the marks
+            if (page == PickPage.Browse && mode == PickMode.Rename) RenderHints(); // Start's label depends on the marks
         }
 
         void RenderHints()
@@ -548,16 +478,6 @@ namespace FullscreenKit
             {
                 add("A", "Change"); add("B", "Close"); add("Select", "Close");
             }
-            else if (page == PickPage.Alternatives)
-            {
-                add("A", "Set as main (Play)"); add("X", "Include / exclude"); add("B", "Done");
-            }
-            else if (page == PickPage.Results)
-            {
-                add("A", "Choose executables"); add("X", "Select / unselect"); add("Y", "Rename"); add("B", "Back to folders");
-                add("Start", "Import selected"); add("LT", "Select none"); add("RT", "Select all"); add("Select", "Options");
-                if (tabs) add("◀ ▶", "Switch mode");
-            }
             else if (!opt.AllowMultiple)
             {
                 add("A", "Open / select"); add("Y", "Places / drives"); add("B", "Back");
@@ -573,10 +493,6 @@ namespace FullscreenKit
                     case PickMode.Rename:
                         add("A", "Open"); add("X", "Mark"); add("Y", "Places / drives"); add("B", "Back");
                         add("Start", markedRename.Count > 0 ? "Rename marked" : "Rename highlighted");
-                        break;
-                    case PickMode.Scan:
-                        add("A", "Open"); add("X", "Mark folder"); add("Y", "Places / drives"); add("B", "Back");
-                        add("Start", markedScan.Count > 0 ? "Scan marked folders" : current == null ? "Scan saved folders" : "Scan this folder");
                         break;
                     default:
                         add("A", "Open / add"); add("X", "Mark"); add("Y", "Places / drives"); add("B", "Back");
@@ -643,22 +559,14 @@ namespace FullscreenKit
             }
             else if (!toastTimer.IsEnabled) ProgressPanel.Visibility = Visibility.Collapsed;
 
-            var s = ScanManager.Snapshot();
+            var s = MetadataManager.Snapshot();
             if (s.Running)
             {
-                ScanPanel.Visibility = Visibility.Visible;
-                ScanBar.Value = s.Percent;
-                ScanText.Text = s.Text + "   " + s.Percent + "%";
+                JobPanel.Visibility = Visibility.Visible;
+                JobBar.Value = s.Percent;
+                JobText.Text = s.Text + "   " + s.Percent + "%";
             }
-            else ScanPanel.Visibility = Visibility.Collapsed;
-
-            int v = ScanManager.ResultsVersion;
-            if (v != seenResultsVersion)
-            {
-                seenResultsVersion = v;
-                if (mode == PickMode.Scan && page == PickPage.Browse && !s.Running && ScanManager.GetResults().Count > 0)
-                    ShowResults(null);
-            }
+            else JobPanel.Visibility = Visibility.Collapsed;
         }
 
         void ShowToast(string text)
@@ -689,7 +597,7 @@ namespace FullscreenKit
             if (idx < 0)
             {
                 bool skipUp = !opt.FoldersOnly;
-                idx = items.ToList().FindIndex(i => i.Selectable && i.Kind != PickKind.Action && (!skipUp || i.Kind != PickKind.Up));
+                idx = items.ToList().FindIndex(i => i.Selectable && (!skipUp || i.Kind != PickKind.Up));
                 if (idx < 0) idx = items.ToList().FindIndex(i => i.Selectable);
             }
             if (idx >= 0) Select(idx);
@@ -697,36 +605,8 @@ namespace FullscreenKit
             RenderHints();
         }
 
-        List<string> SavedRoots()
-        {
-            return (Settings.SavedRoots ?? new List<string>()).Where(Directory.Exists).ToList();
-        }
-
         void FillPlaces()
         {
-            if (mode == PickMode.Scan)
-            {
-                var results = ScanManager.GetResults();
-                var saved = SavedRoots();
-                if (results.Count > 0 || saved.Count > 0) items.Add(new PickItem { Kind = PickKind.Header, Text = "SCAN" });
-                if (results.Count > 0)
-                    items.Add(new PickItem { Kind = PickKind.Action, Tag = "results", Glyph = "\uE8FD", Text = "Review scan results", Sub = results.Count + " games waiting" });
-                if (saved.Count > 0)
-                {
-                    items.Add(new PickItem { Kind = PickKind.Action, Tag = "scanall", Glyph = "\uE72C", Text = "Scan all saved folders", Sub = saved.Count + " folder(s)" });
-                    items.Add(new PickItem { Kind = PickKind.Header, Text = "SAVED FOLDERS" });
-                    foreach (var r in saved)
-                    {
-                        var name = System.IO.Path.GetFileName(r.TrimEnd('\\'));
-                        items.Add(new PickItem
-                        {
-                            Kind = PickKind.Saved, Glyph = "\uE8B7", Text = string.IsNullOrEmpty(name) ? r : name, Sub = r, Path = r,
-                            Marked = markedScan.Contains(r, StringComparer.OrdinalIgnoreCase)
-                        });
-                    }
-                }
-            }
-
             items.Add(new PickItem { Kind = PickKind.Header, Text = "PLACES" });
             string profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var places = new[]
@@ -761,8 +641,6 @@ namespace FullscreenKit
         {
             if (opt.FoldersOnly)
                 items.Add(new PickItem { Kind = PickKind.Use, Glyph = "\uE73E", Text = "Use this folder", Sub = path, Path = path });
-            if (mode == PickMode.Scan)
-                items.Add(new PickItem { Kind = PickKind.Action, Tag = "scanhere", Glyph = "\uE721", Text = "Scan this folder", Sub = path });
 
             string parent = null;
             try { parent = Directory.GetParent(path)?.FullName; } catch { }
@@ -773,14 +651,10 @@ namespace FullscreenKit
             var dirs = dir.GetDirectories().Where(d => hidden || (d.Attributes & (FileAttributes.Hidden | FileAttributes.System)) == 0).ToList();
             dirs = SortDirs(dirs).Take(MaxFolders).ToList();
 
-            if (mode == PickMode.Scan || opt.FoldersOnly)
+            if (opt.FoldersOnly)
             {
                 foreach (var d in dirs)
-                    items.Add(new PickItem
-                    {
-                        Kind = PickKind.Folder, Glyph = "\uE8B7", Text = d.Name, Path = d.FullName,
-                        Marked = mode == PickMode.Scan && markedScan.Contains(d.FullName, StringComparer.OrdinalIgnoreCase)
-                    });
+                    items.Add(new PickItem { Kind = PickKind.Folder, Glyph = "\uE8B7", Text = d.Name, Path = d.FullName });
                 return;
             }
 
@@ -796,7 +670,7 @@ namespace FullscreenKit
                 items.Add(new PickItem
                 {
                     Kind = PickKind.Folder, Glyph = "\uE8B7", Text = d.Name, Path = d.FullName,
-                    Marked = (mode == PickMode.Move || mode == PickMode.Rename) && Marks.Contains(d.FullName, StringComparer.OrdinalIgnoreCase)
+                    Marked = mode != PickMode.Add && Marks.Contains(d.FullName, StringComparer.OrdinalIgnoreCase)
                 });
             if (files.Count > 0) items.Add(new PickItem { Kind = PickKind.Header, Text = "FILES" });
             foreach (var f in files)

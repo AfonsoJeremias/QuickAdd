@@ -17,4 +17,9 @@
     <None Update="extension.yaml" CopyToOutputDirectory="PreserveNewest" />
     <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- if the files of the alternative layout are still in the repository, ignore them -->
+    <Compile Remove="src\**" />
+    <Page Remove="src\**" />
+  </ItemGroup>
 </Project>

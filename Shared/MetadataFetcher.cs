@@ -3,6 +3,7 @@ using Playnite.SDK.Models;
 using Playnite.SDK.Plugins;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -10,8 +11,9 @@ using System.Net;
 namespace FullscreenKit
 {
     /// <summary>
-    /// Fills in missing metadata (description, images, genres, developers, ...) for games using the metadata plugins
-    /// that are installed in Playnite (IGDB first). Fields the game already has are never overwritten.
+    /// Fills in missing metadata for games using the metadata plugins installed in Playnite (IGDB first). Every plugin
+    /// is asked until all fields are filled; fields the game already has are never overwritten.
+    /// Note: the SDK gives extensions no way to start Playnite's own metadata download, so this mirrors it.
     /// </summary>
     public static class MetadataFetcher
     {
@@ -21,15 +23,18 @@ namespace FullscreenKit
         {
             public string Description;
             public Img Cover, Background, Icon;
-            public List<MetadataProperty> Genres, Developers, Publishers, Tags, Features;
+            public List<MetadataProperty> Genres, Developers, Publishers, Tags, Features, Series;
+            public List<Link> Links;
             public ReleaseDate? Date;
+            public int? Community, Critic, User;
 
             public bool HasAnything
             {
                 get
                 {
                     return !string.IsNullOrWhiteSpace(Description) || Cover != null || Background != null || Icon != null ||
-                           Genres != null || Developers != null || Publishers != null || Tags != null || Features != null || Date != null;
+                           Genres != null || Developers != null || Publishers != null || Tags != null || Features != null ||
+                           Series != null || Links != null || Date != null || Community != null || Critic != null || User != null;
                 }
             }
         }
@@ -65,13 +70,14 @@ namespace FullscreenKit
                 var f = new Fetched();
                 foreach (var plugin in plugins)
                 {
+                    if (cancelled()) break;
                     try
                     {
                         using (var provider = plugin.GetMetadataProvider(new MetadataRequestOptions(game, true)))
                             Gather(game, provider, f);
                     }
                     catch { }
-                    if (Complete(game, f)) break;
+                    if (!StillMissing(game, f)) break; // everything is filled, no need to ask the next plugin
                 }
                 if (!f.HasAnything) continue;
 
@@ -115,15 +121,37 @@ namespace FullscreenKit
                 f.Tags = AsList(Safe(() => p.GetTags(args)));
             if (f.Features == null && Empty(game.FeatureIds) && fields.Contains(MetadataField.Features))
                 f.Features = AsList(Safe(() => p.GetFeatures(args)));
+            if (f.Series == null && Empty(game.SeriesIds) && fields.Contains(MetadataField.Series))
+                f.Series = AsList(Safe(() => p.GetSeries(args)));
+
             if (f.Date == null && game.ReleaseDate == null && fields.Contains(MetadataField.ReleaseDate))
                 f.Date = Safe(() => p.GetReleaseDate(args));
+            if (f.Links == null && (game.Links == null || game.Links.Count == 0) && fields.Contains(MetadataField.Links))
+            {
+                var links = Safe(() => p.GetLinks(args));
+                if (links != null && links.Count > 0) f.Links = links;
+            }
+            if (f.Community == null && game.CommunityScore == null && fields.Contains(MetadataField.CommunityScore))
+                f.Community = Safe(() => p.GetCommunityScore(args));
+            if (f.Critic == null && game.CriticScore == null && fields.Contains(MetadataField.CriticScore))
+                f.Critic = Safe(() => p.GetCriticScore(args));
+            if (f.User == null && game.UserScore == null && fields.Contains(MetadataField.UserScore))
+                f.User = Safe(() => p.GetUserScore(args));
         }
 
-        static bool Complete(Game game, Fetched f)
+        static bool StillMissing(Game game, Fetched f)
         {
-            bool desc = !string.IsNullOrEmpty(game.Description) || !string.IsNullOrWhiteSpace(f.Description);
-            bool cover = !string.IsNullOrEmpty(game.CoverImage) || f.Cover != null;
-            return desc && cover;
+            if (string.IsNullOrEmpty(game.Description) && string.IsNullOrWhiteSpace(f.Description)) return true;
+            if (string.IsNullOrEmpty(game.CoverImage) && f.Cover == null) return true;
+            if (string.IsNullOrEmpty(game.BackgroundImage) && f.Background == null) return true;
+            if (string.IsNullOrEmpty(game.Icon) && f.Icon == null) return true;
+            if (Empty(game.GenreIds) && f.Genres == null) return true;
+            if (Empty(game.DeveloperIds) && f.Developers == null) return true;
+            if (Empty(game.PublisherIds) && f.Publishers == null) return true;
+            if (Empty(game.TagIds) && f.Tags == null) return true;
+            if (Empty(game.FeatureIds) && f.Features == null) return true;
+            if (game.ReleaseDate == null && f.Date == null) return true;
+            return false;
         }
 
         static List<MetadataProperty> AsList(IEnumerable<MetadataProperty> props)
@@ -176,8 +204,14 @@ namespace FullscreenKit
             if (tags != null) { game.TagIds = tags; changed = true; }
             var feats = Merge(game.FeatureIds, api.Database.Features, f.Features);
             if (feats != null) { game.FeatureIds = feats; changed = true; }
+            var series = Merge(game.SeriesIds, api.Database.Series, f.Series);
+            if (series != null) { game.SeriesIds = series; changed = true; }
 
             if (f.Date != null && game.ReleaseDate == null) { game.ReleaseDate = f.Date; changed = true; }
+            if (f.Links != null && (game.Links == null || game.Links.Count == 0)) { game.Links = new ObservableCollection<Link>(f.Links); changed = true; }
+            if (f.Community != null && game.CommunityScore == null) { game.CommunityScore = f.Community; changed = true; }
+            if (f.Critic != null && game.CriticScore == null) { game.CriticScore = f.Critic; changed = true; }
+            if (f.User != null && game.UserScore == null) { game.UserScore = f.User; changed = true; }
             return changed;
         }
 

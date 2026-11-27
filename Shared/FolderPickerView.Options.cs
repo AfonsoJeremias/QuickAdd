@@ -6,7 +6,9 @@ namespace FullscreenKit
 {
     public partial class FolderPickerView
     {
-        // ======================= options (Select): different list for every mode =======================
+        // ======================= options (Select): a different list for every mode =======================
+
+        PickPage optionsReturn = PickPage.Browse;
 
         sealed class OptionDef
         {
@@ -23,50 +25,31 @@ namespace FullscreenKit
             var list = new List<OptionDef>();
             Action<string, Func<string>, Action> add = (l, v, c) => list.Add(new OptionDef { Label = l, Value = v, Change = c });
 
-            if (mode == PickMode.Scan)
-            {
-                if (ScanManager.Snapshot().Running)
-                    add("Cancel the running scan / import / metadata", () => "A to cancel", () => { ScanManager.Cancel(); ShowToast("Cancelling…"); });
+            if (MetadataManager.Snapshot().Running)
+                add("Cancel the running metadata download", () => "A to cancel", () => { MetadataManager.Cancel(); ShowToast("Cancelling…"); });
 
-                add("Folder layout", () => s.FolderPerGame ? "One game per subfolder (collections are split)" : "Folder with the executable",
-                    () => s.FolderPerGame = !s.FolderPerGame);
-                add("Search depth", () => s.Depth.ToString(), () => s.Depth = s.Depth % 4 + 1);
-                add("Game name from", () => s.NameFromFolder ? "Folder name" : "File name", () => s.NameFromFolder = !s.NameFromFolder);
-                add("Include files (wildcards, ; separated)", () => s.Include,
-                    () => EditText("Files to include, e.g. *.exe;*.bat", s.Include, v => s.Include = v));
-                add("Exclude files (wildcards, ; separated)", () => s.Exclude,
-                    () => EditText("Files to skip, e.g. unins*;*setup*", s.Exclude, v => s.Exclude = v));
-                add("Hide games already in the library", () => OnOff(s.HideExisting), () => s.HideExisting = !s.HideExisting);
-                add("Install paths", () => s.RelativePaths ? "Relative to the Playnite folder" : "Absolute", () => s.RelativePaths = !s.RelativePaths);
-                add("Ask each game's name before importing", () => OnOff(s.AskNamesScan), () => s.AskNamesScan = !s.AskNamesScan);
-                add("Download metadata after importing", () => OnOff(s.DownloadMetadata), () => s.DownloadMetadata = !s.DownloadMetadata);
-                list.Add(MetadataSourceOption());
-                add("Saved scan folders", () => s.SavedRoots.Count + " saved - A clears them", () => s.SavedRoots.Clear());
-            }
-            else if (mode == PickMode.Add)
+            switch (mode)
             {
-                add("Ask each game's name when adding", () => OnOff(s.AskNamesAdd), () => s.AskNamesAdd = !s.AskNamesAdd);
-                add("Download metadata after adding", () => OnOff(s.DownloadMetadata), () => s.DownloadMetadata = !s.DownloadMetadata);
-                list.Add(MetadataSourceOption());
-            }
-            else if (mode == PickMode.Move)
-            {
-                add("When the name already exists", () => s.MoveConflict == 1 ? "Keep both (add a number)" : "Skip it",
-                    () => s.MoveConflict = s.MoveConflict == 1 ? 0 : 1);
-                add("Update library paths after moving", () => OnOff(s.UpdateLibraryPaths), () => s.UpdateLibraryPaths = !s.UpdateLibraryPaths);
-            }
-            else
-            {
-                add("Keep the file extension when renaming", () => OnOff(s.KeepExtension), () => s.KeepExtension = !s.KeepExtension);
-                add("Update library paths after renaming", () => OnOff(s.UpdateLibraryPaths), () => s.UpdateLibraryPaths = !s.UpdateLibraryPaths);
+                case PickMode.Add:
+                    add("Ask each game's name when adding", () => OnOff(s.AskNamesAdd), () => s.AskNamesAdd = !s.AskNamesAdd);
+                    add("Download metadata after adding", () => OnOff(s.DownloadMetadata), () => s.DownloadMetadata = !s.DownloadMetadata);
+                    list.Add(MetadataSourceOption());
+                    add("Select the new games in the library", () => OnOff(s.SelectAdded), () => s.SelectAdded = !s.SelectAdded);
+                    break;
+                case PickMode.Move:
+                    add("When the name already exists", () => s.MoveConflict == 1 ? "Keep both (add a number)" : "Skip it",
+                        () => s.MoveConflict = s.MoveConflict == 1 ? 0 : 1);
+                    add("Update library paths after moving", () => OnOff(s.UpdateLibraryPaths), () => s.UpdateLibraryPaths = !s.UpdateLibraryPaths);
+                    break;
+                default:
+                    add("Keep the file extension when renaming", () => OnOff(s.KeepExtension), () => s.KeepExtension = !s.KeepExtension);
+                    add("Update library paths after renaming", () => OnOff(s.UpdateLibraryPaths), () => s.UpdateLibraryPaths = !s.UpdateLibraryPaths);
+                    break;
             }
 
-            if (mode != PickMode.Scan)
-            {
-                add("Sort by", () => s.SortBy == 1 ? "Date modified" : s.SortBy == 2 ? "Size (files)" : "Name", () => s.SortBy = (s.SortBy + 1) % 3);
-                add("Order", () => s.SortDescending ? "Descending" : "Ascending", () => s.SortDescending = !s.SortDescending);
-                add("Show hidden and system files", () => OnOff(s.ShowHidden), () => s.ShowHidden = !s.ShowHidden);
-            }
+            add("Sort by", () => s.SortBy == 1 ? "Date modified" : s.SortBy == 2 ? "Size (files)" : "Name", () => s.SortBy = (s.SortBy + 1) % 3);
+            add("Order", () => s.SortDescending ? "Descending" : "Ascending", () => s.SortDescending = !s.SortDescending);
+            add("Show hidden and system files", () => OnOff(s.ShowHidden), () => s.ShowHidden = !s.ShowHidden);
             add("Open in the last folder", () => OnOff(s.RememberLastFolder), () => s.RememberLastFolder = !s.RememberLastFolder);
             add("Reset all options", () => "A to reset", () => s.ResetOptions());
             return list;
@@ -78,7 +61,7 @@ namespace FullscreenKit
             return new OptionDef
             {
                 Label = "Metadata source",
-                Value = () => string.IsNullOrEmpty(s.MetadataSource) ? "All installed (IGDB first)" : s.MetadataSource,
+                Value = () => string.IsNullOrEmpty(s.MetadataSource) ? "All installed plugins (IGDB first)" : s.MetadataSource,
                 Change = () =>
                 {
                     var all = new List<string> { "" };
@@ -89,25 +72,16 @@ namespace FullscreenKit
             };
         }
 
-        void EditText(string message, string currentValue, Action<string> apply)
-        {
-            if (opt.PromptText == null) { ShowToast("Text input isn't available here."); return; }
-            var v = opt.PromptText(message, "Option", currentValue);
-            if (v != null) apply(v.Trim());
-        }
-
         void ToggleOptions()
         {
             if (page == PickPage.Options) { CloseOptions(); return; }
-            if (page != PickPage.Browse && page != PickPage.Results) return;
-            if (!opt.AllowMultiple) return;
-            optionsReturn = page;
+            if (page != PickPage.Browse || !opt.AllowMultiple) return;
             RenderOptions(0);
         }
 
         void CloseOptions()
         {
-            if (optionsReturn == PickPage.Results) ShowResults(null); else Navigate(current, null);
+            Navigate(current, null);
             UpdateModeUi();
         }
 

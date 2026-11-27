@@ -120,7 +120,7 @@ namespace FullscreenKit
                 var target = Path.Combine(job.Dest, Path.GetFileName(srcTrim));
                 if (File.Exists(target) || Directory.Exists(target))
                 {
-                    if (ScanSettings.Current.MoveConflict != 1) { skipped++; continue; } // 0 = skip, 1 = keep both
+                    if (QuickSettings.Current.MoveConflict != 1) { skipped++; continue; } // 0 = skip, 1 = keep both
                     target = UniqueTarget(job.Dest, Path.GetFileName(srcTrim), isDir);
                 }
 
@@ -170,7 +170,7 @@ namespace FullscreenKit
             Update(items.Count, items.Count, "", total, total, true);
 
             int libUpdated = 0;
-            if (pairs.Count > 0 && ScanSettings.Current.UpdateLibraryPaths)
+            if (pairs.Count > 0 && QuickSettings.Current.UpdateLibraryPaths)
             {
                 try { libUpdated = LibraryPathUpdater.UpdateOnUi(api, pairs); } catch { }
             }
