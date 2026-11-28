@@ -86,14 +86,6 @@
                                  BorderThickness="0" Background="#FF2A3138" Foreground="#FFF2A33A"/>
                 </StackPanel>
             </Border>
-            <Border x:Name="JobPanel" Padding="16,10" CornerRadius="8" Background="#FF1E252B" Margin="0,8,0,0"
-                    Visibility="Collapsed">
-                <StackPanel>
-                    <TextBlock x:Name="JobText" FontSize="16" Foreground="White" TextTrimming="CharacterEllipsis"/>
-                    <ProgressBar x:Name="JobBar" Height="10" Margin="0,8,0,0" Minimum="0" Maximum="100"
-                                 BorderThickness="0" Background="#FF2A3138" Foreground="#FF2FA36B"/>
-                </StackPanel>
-            </Border>
         </StackPanel>
 
         <!-- button prompts: change with mode and page -->

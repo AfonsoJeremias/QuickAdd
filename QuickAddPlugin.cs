@@ -49,7 +49,7 @@ namespace QuickAdd
             PickerHost.Configure(PlayniteApi, GetPluginUserDataPath()); // idempotent safety net
             LibraryIndex.Refresh(PlayniteApi);
 
-            var paths = PickerHost.PickFiles(PlayniteApi, "Quick Add", Exts, null, true, true, true);
+            var paths = PickerHost.PickFiles(PlayniteApi, "Quick Add", Exts, null, true, true, true, true);
             if (paths == null || paths.Count == 0) return;
 
             var settings = QuickSettings.Current;
@@ -61,14 +61,13 @@ namespace QuickAdd
             }
             if (added.Count == 0) return;
 
-            Notify(added.Count == 1 ? "Quick Add: 1 game added." : "Quick Add: " + added.Count + " games added.");
+            Notify((added.Count == 1 ? "Quick Add: 1 game added." : "Quick Add: " + added.Count + " games added.") +
+                   " Update your Playnite library to download their metadata.");
             if (settings.SelectAdded)
             {
-                // so Playnite's own "Download metadata" (with all your metadata settings) can be applied to them in one step
+                // so they are easy to find when you update the library / download metadata in Playnite
                 try { PlayniteApi.MainView.SelectGames(added.Select(g => g.Id)); } catch { }
             }
-            if (settings.DownloadMetadata && !MetadataManager.StartMetadata(added, settings))
-                Notify("Quick Add: metadata download skipped, another job is still running.");
         }
 
         void Notify(string text)

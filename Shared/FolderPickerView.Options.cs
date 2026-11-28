@@ -8,8 +8,6 @@ namespace FullscreenKit
     {
         // ======================= options (Select): a different list for every mode =======================
 
-        PickPage optionsReturn = PickPage.Browse;
-
         sealed class OptionDef
         {
             public string Label;
@@ -25,15 +23,10 @@ namespace FullscreenKit
             var list = new List<OptionDef>();
             Action<string, Func<string>, Action> add = (l, v, c) => list.Add(new OptionDef { Label = l, Value = v, Change = c });
 
-            if (MetadataManager.Snapshot().Running)
-                add("Cancel the running metadata download", () => "A to cancel", () => { MetadataManager.Cancel(); ShowToast("Cancelling…"); });
-
             switch (mode)
             {
                 case PickMode.Add:
                     add("Ask each game's name when adding", () => OnOff(s.AskNamesAdd), () => s.AskNamesAdd = !s.AskNamesAdd);
-                    add("Download metadata after adding", () => OnOff(s.DownloadMetadata), () => s.DownloadMetadata = !s.DownloadMetadata);
-                    list.Add(MetadataSourceOption());
                     add("Select the new games in the library", () => OnOff(s.SelectAdded), () => s.SelectAdded = !s.SelectAdded);
                     break;
                 case PickMode.Move:
@@ -41,9 +34,16 @@ namespace FullscreenKit
                         () => s.MoveConflict = s.MoveConflict == 1 ? 0 : 1);
                     add("Update library paths after moving", () => OnOff(s.UpdateLibraryPaths), () => s.UpdateLibraryPaths = !s.UpdateLibraryPaths);
                     break;
-                default:
+                case PickMode.Rename:
                     add("Keep the file extension when renaming", () => OnOff(s.KeepExtension), () => s.KeepExtension = !s.KeepExtension);
                     add("Update library paths after renaming", () => OnOff(s.UpdateLibraryPaths), () => s.UpdateLibraryPaths = !s.UpdateLibraryPaths);
+                    break;
+                default:
+                    add("Suggested name for a new folder", () => s.DefaultFolderName,
+                        () => EditText("Suggested name for new folders", s.DefaultFolderName, v => s.DefaultFolderName = v));
+                    add("Suggested name for a new file", () => s.DefaultFileName,
+                        () => EditText("Suggested name for new files, with extension (for example New file.txt)", s.DefaultFileName, v => s.DefaultFileName = v));
+                    add("Go into a new folder right after creating it", () => OnOff(s.OpenNewFolder), () => s.OpenNewFolder = !s.OpenNewFolder);
                     break;
             }
 
@@ -55,21 +55,11 @@ namespace FullscreenKit
             return list;
         }
 
-        OptionDef MetadataSourceOption()
+        void EditText(string message, string currentValue, Action<string> apply)
         {
-            var s = Settings;
-            return new OptionDef
-            {
-                Label = "Metadata source",
-                Value = () => string.IsNullOrEmpty(s.MetadataSource) ? "All installed plugins (IGDB first)" : s.MetadataSource,
-                Change = () =>
-                {
-                    var all = new List<string> { "" };
-                    if (opt.MetadataSources != null) all.AddRange(opt.MetadataSources());
-                    int i = all.IndexOf(s.MetadataSource ?? "");
-                    s.MetadataSource = all[(i + 1) % all.Count];
-                }
-            };
+            if (opt.PromptText == null) { ShowToast("Text input isn't available here."); return; }
+            var v = opt.PromptText(message, "Option", currentValue);
+            if (!string.IsNullOrWhiteSpace(v)) apply(v.Trim());
         }
 
         void ToggleOptions()

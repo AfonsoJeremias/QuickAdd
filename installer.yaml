@@ -1,11 +1,21 @@
 AddonId: 'QuickAdd_FullscreenAddGame'
 Packages:
+  - Version: 1.1.0
+    RequiredApiVersion: 6.12.0
+    ReleaseDate: 2026-11-28
+    PackageUrl: https://github.com/AfonsoJeremias/QuickAdd/releases/download/v1.1.0/QuickAdd_1.1.0.pext
+    Changelog:
+      - New CREATE mode - create folders and empty files from the controller
+      - Rename mode renames real files and folders on disk
+      - Move mode keeps your library paths up to date
+      - The extension ignores the controller while the on-screen keyboard is open
+      - Removed the metadata download - Quick Add only adds the games, update the Playnite library for metadata
   - Version: 1.0.0
     RequiredApiVersion: 6.12.0
-    ReleaseDate: 2026-11-27
+    ReleaseDate: 2026-11-23
     PackageUrl: https://github.com/AfonsoJeremias/QuickAdd/releases/download/v1.0.0/QuickAdd_1.0.0.pext
     Changelog:
       - Initial release
-      - Controller-driven file browser for Fullscreen mode with Add, Move and Rename modes
-      - Add several games at once; executables already in the library can't be added twice
-      - Metadata is downloaded after adding games
+      - Controller-driven file browser for Fullscreen mode
+      - Add several games at once
+      - Move mode with background progress bar

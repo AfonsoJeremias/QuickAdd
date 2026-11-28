@@ -1,6 +1,6 @@
 # Quick Add (Fullscreen)
 
-Playnite extension to add and organise games and files **without leaving Fullscreen mode**, using only a controller.
+Playnite extension to add games and manage files **without leaving Fullscreen mode**, using only a controller.
 
 Playnite menu (Back/View button) -> Extensions -> Quick Add -> "Add a game or app..."
 
@@ -10,9 +10,9 @@ Navigate with the D-pad or the left stick (hold up/down to scroll fast). Switch 
 
 | Button | What it does |
 |---|---|
-| A | Open the folder / act on the highlighted item (see the table below) |
+| A | Open the folder / act on the highlighted item |
 | B | Go back (closes the browser at the top level) |
-| X | Mark / unmark the highlighted item |
+| X | Mark / unmark the highlighted item (New folder in CREATE mode) |
 | Y | Places and drives |
 | Start | Confirm the action of the current mode |
 | Select | Options of the current mode |
@@ -24,8 +24,9 @@ Navigate with the D-pad or the left stick (hold up/down to scroll fast). Switch 
 | **ADD** | open folder / add the highlighted file (plus the marked ones) | mark file | add the marked files |
 | **MOVE** | open folder | mark file or folder | move the marked items into the folder you are in |
 | **RENAME** | open folder | mark file or folder | rename the marked items (or the highlighted one) on disk |
+| **CREATE** | open folder | new folder | new file |
 
-Keyboard: arrows, Enter, Esc/Backspace, Space (mark), Y, F2 (options), Ctrl+Enter (Start), Tab (next mode).
+Keyboard: arrows, Enter, Esc/Backspace, Space (mark / new folder), Y, F2 (options), Ctrl+Enter (Start), Tab (next mode).
 
 ## ADD
 * Mark several games with **X** (even in different folders) and press **Start** to add them all at once.
@@ -33,8 +34,11 @@ Keyboard: arrows, Enter, Esc/Backspace, Space (mark), Y, F2 (options), Ctrl+Ente
 * An executable that is already in your library can't be added again: it is flagged *already in library* and refused with a warning.
 * Optionally asks for each game's name, one after the other (Cancel skips that game).
 * The game's icon is extracted automatically.
-* **Metadata:** the extension asks your installed metadata plugins (IGDB first) for everything that is missing: description, cover, background, icon, genres, developers, publishers, tags, features, series, release date, links and community / critic scores. Fields you already have are never overwritten. You can choose a single source in the options.
-* The new games are selected in your library afterwards.
+* The new games are selected in your library afterwards, so they are easy to find.
+
+> **About metadata:** Quick Add **only adds the games** (name, install folder, launch action and icon). It does not download metadata.
+> To get covers, descriptions, genres and so on, **update your Playnite library** (or use Playnite's own *Download metadata*):
+> Playnite then applies your own metadata settings and sources.
 
 ## MOVE
 * Lists **every kind of file**, and folders too.
@@ -49,23 +53,32 @@ Keyboard: arrows, Enter, Esc/Backspace, Space (mark), Y, F2 (options), Ctrl+Ente
 * **Start** renames the marked items, or the highlighted one if nothing is marked. Names are typed with Playnite's on-screen keyboard (Cancel skips that item).
 * Checks for invalid and duplicate names, keeps the file extension (optional) and updates library paths (optional).
 
+## CREATE
+* Creates **folders and empty files** inside the folder you are browsing: **X** = new folder, **Start** = new file.
+* The name is typed with Playnite's on-screen keyboard, with a suggestion that is already free ("New folder", "New folder (2)", "New file.txt"...). Cancel does nothing.
+* An existing name is never overwritten, and invalid names are refused.
+* Right after creating a folder you go into it (optional); a new file is highlighted in the list.
+* You must be inside a folder: at the "Places and drives" screen there is nowhere to create.
+
 ## Options (Select)
 Each mode has its own list:
 
 | Mode | Options |
 |---|---|
-| ADD | ask each name, download metadata, metadata source, select the new games |
+| ADD | ask each name, select the new games |
 | MOVE | name conflict policy (skip / keep both), update library paths |
 | RENAME | keep file extension, update library paths |
-| All | sort by name / date / size, order, show hidden files, open in the last folder, reset all, cancel the running metadata download |
+| CREATE | suggested folder name, suggested file name, go into a new folder after creating it |
+| All | sort by name / date / size, order, show hidden files, open in the last folder, reset all |
+
+Options are saved in `settings.json` in the extension's data folder.
 
 ## Notes
 * While Playnite's on-screen keyboard is open, the extension ignores the controller, so typing never moves its menu.
-* **Desktop mode** falls back to standard Windows dialogs (Explorer-style folder picker, multi-select file picker). Move and Rename are Fullscreen only.
+* **Desktop mode** falls back to standard Windows dialogs (Explorer-style folder picker, multi-select file picker). Move, Rename and Create are Fullscreen only.
 * Requires a Playnite version with API 6.12 or newer.
 
 ### Known limitations
-* **Metadata:** the Playnite SDK gives extensions no way to start Playnite's own metadata download, so Quick Add asks the metadata plugins itself. To apply your complete metadata settings, run Playnite's **Download metadata** on the new games (they are already selected for you).
 * **Library paths:** Move and Rename fix absolute paths and install folders. If you move only a subfolder inside a game's install folder, actions that are relative to it can still break.
 * If Playnite is closed in the middle of a copy between drives, the originals are untouched, but a partial copy may remain at the destination.
 
@@ -74,6 +87,8 @@ Actions tab -> **Build and release** -> **Run workflow** -> type the version (fo
 It builds the extension, names the file `QuickAdd_<version>.pext` and creates a release named `<version>` (tag `v<version>`) with that file attached.
 Pushes and pull requests only run a compile check (version `0.0.0`) and don't create releases.
 
+Keep `icon.png` in the repository root: it is copied next to the DLL and packed into the `.pext`.
+Keep `installer.yaml` in the repository root, and add a new entry to it for each release (same version, same `.pext` name).
 
 ## Credits
 The idea of a controller-first file browser was inspired by [Kippix](https://github.com/Kipping0/Kippix) by Kipping0.

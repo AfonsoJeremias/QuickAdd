@@ -26,5 +26,8 @@
     <Compile Remove="Shared\ScanSettings.cs" />
     <Compile Remove="Shared\NameCleaner.cs" />
     <Compile Remove="Shared\FolderPickerView.Scan.cs" />
+    <!-- removed in this version: the metadata download -->
+    <Compile Remove="Shared\MetadataFetcher.cs" />
+    <Compile Remove="Shared\MetadataManager.cs" />
   </ItemGroup>
 </Project>

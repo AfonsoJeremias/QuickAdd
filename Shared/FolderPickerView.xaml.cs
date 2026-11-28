@@ -22,6 +22,7 @@ namespace FullscreenKit
         public bool AllowMultiple { get; set; }
         public bool AllowMove { get; set; }
         public bool AllowRename { get; set; }
+        public bool AllowCreate { get; set; }
         /// <summary>Add mode only. Lower-case with dot, e.g. ".exe". Empty = all files.</summary>
         public string[] Extensions { get; set; } = new string[0];
         public string StartPath { get; set; }
@@ -33,11 +34,10 @@ namespace FullscreenKit
         /// <summary>Fixes library paths after files were renamed: returns the number of games changed.</summary>
         public Func<IList<KeyValuePair<string, string>>, int> UpdateLibrary { get; set; }
         public Action<string> Notify { get; set; }
-        public Func<List<string>> MetadataSources { get; set; }
     }
 
     public enum PickKind { Header, Place, Drive, Up, Use, Folder, File, Option }
-    public enum PickMode { Add, Move, Rename }
+    public enum PickMode { Add, Move, Rename, Create }
     public enum PickPage { Browse, Options }
 
     public class PickItem : INotifyPropertyChanged
@@ -79,6 +79,7 @@ namespace FullscreenKit
         static readonly Brush AddColor = new SolidColorBrush(Color.FromRgb(0x2F, 0x7D, 0xD1));
         static readonly Brush MoveColor = new SolidColorBrush(Color.FromRgb(0xE0, 0x8A, 0x1E));
         static readonly Brush RenameColor = new SolidColorBrush(Color.FromRgb(0x9B, 0x5D, 0xD1));
+        static readonly Brush CreateColor = new SolidColorBrush(Color.FromRgb(0x2A, 0xA6, 0xA0));
         static readonly Brush KeyCapColor = new SolidColorBrush(Color.FromRgb(0x2A, 0x31, 0x38));
         static readonly Brush HintColor = new SolidColorBrush(Color.FromRgb(0xA0, 0xA8, 0xB0));
         static readonly Dictionary<string, Brush> FaceColors = new Dictionary<string, Brush>
@@ -97,6 +98,7 @@ namespace FullscreenKit
         readonly List<string> markedAdd = new List<string>();
         readonly List<string> markedMove = new List<string>();
         readonly List<string> markedRename = new List<string>();
+        readonly List<string> markedCreate = new List<string>(); // Create mode never marks anything
         readonly List<PickMode> modes = new List<PickMode>();
         readonly DispatcherTimer repeat = new DispatcherTimer();
         readonly DispatcherTimer toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
@@ -119,6 +121,7 @@ namespace FullscreenKit
                 {
                     case PickMode.Move: return markedMove;
                     case PickMode.Rename: return markedRename;
+                    case PickMode.Create: return markedCreate;
                     default: return markedAdd;
                 }
             }
@@ -130,11 +133,12 @@ namespace FullscreenKit
         {
             InitializeComponent();
             opt = options ?? new PickerOptions();
-            if (!opt.AllowMultiple || opt.FoldersOnly) { opt.AllowMove = false; opt.AllowRename = false; }
+            if (!opt.AllowMultiple || opt.FoldersOnly) { opt.AllowMove = false; opt.AllowRename = false; opt.AllowCreate = false; }
 
             modes.Add(PickMode.Add);
             if (opt.AllowMove) modes.Add(PickMode.Move);
             if (opt.AllowRename) modes.Add(PickMode.Rename);
+            if (opt.AllowCreate) modes.Add(PickMode.Create);
 
             List.ItemsSource = items;
             UpdateModeUi();
@@ -154,7 +158,6 @@ namespace FullscreenKit
             {
                 Focus();
                 MoveManager.Changed -= OnJobsChanged; MoveManager.Changed += OnJobsChanged;
-                MetadataManager.Changed -= OnJobsChanged; MetadataManager.Changed += OnJobsChanged;
                 UpdateProgress();
             };
             Unloaded += (s, e) => { repeat.Stop(); Unsubscribe(); };
@@ -166,7 +169,6 @@ namespace FullscreenKit
         void Unsubscribe()
         {
             MoveManager.Changed -= OnJobsChanged;
-            MetadataManager.Changed -= OnJobsChanged;
         }
 
         /// <summary>Stops a held direction (used when Playnite's on-screen keyboard takes over the pad).</summary>
@@ -300,6 +302,7 @@ namespace FullscreenKit
                 if (current != null) Finish(new List<string> { current });
                 return;
             }
+            if (mode == PickMode.Create) { CreateItem(true); return; } // X = new folder
             if (it == null) return;
 
             switch (mode)
@@ -332,6 +335,7 @@ namespace FullscreenKit
             }
             if (mode == PickMode.Move) { StartMove(); return; }
             if (mode == PickMode.Rename) { StartRename(); return; }
+            if (mode == PickMode.Create) { CreateItem(false); return; } // Start = new file
             if (!opt.AllowMultiple) return;
 
             if (markedAdd.Count > 0) { Finish(new List<string>(markedAdd)); return; }
@@ -415,6 +419,7 @@ namespace FullscreenKit
             {
                 case PickMode.Move: return MoveColor;
                 case PickMode.Rename: return RenameColor;
+                case PickMode.Create: return CreateColor;
                 default: return AddColor;
             }
         }
@@ -494,6 +499,10 @@ namespace FullscreenKit
                         add("A", "Open"); add("X", "Mark"); add("Y", "Places / drives"); add("B", "Back");
                         add("Start", markedRename.Count > 0 ? "Rename marked" : "Rename highlighted");
                         break;
+                    case PickMode.Create:
+                        add("A", "Open"); add("X", "New folder"); add("Y", "Places / drives"); add("B", "Back");
+                        add("Start", "New file");
+                        break;
                     default:
                         add("A", "Open / add"); add("X", "Mark"); add("Y", "Places / drives"); add("B", "Back");
                         add("Start", "Add marked");
@@ -559,14 +568,6 @@ namespace FullscreenKit
             }
             else if (!toastTimer.IsEnabled) ProgressPanel.Visibility = Visibility.Collapsed;
 
-            var s = MetadataManager.Snapshot();
-            if (s.Running)
-            {
-                JobPanel.Visibility = Visibility.Visible;
-                JobBar.Value = s.Percent;
-                JobText.Text = s.Text + "   " + s.Percent + "%";
-            }
-            else JobPanel.Visibility = Visibility.Collapsed;
         }
 
         void ShowToast(string text)

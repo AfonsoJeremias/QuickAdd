@@ -11,7 +11,7 @@ namespace FullscreenKit
     /// <summary>
     /// One entry point for picking folders / files.
     /// Desktop: native Windows dialogs. Fullscreen: FolderPickerView in a Playnite window sized to the Playnite window,
-    /// driven by OnControllerButtonStateChanged (Add / Move / Rename modes).
+    /// driven by OnControllerButtonStateChanged (Add / Move / Rename / Create modes).
     /// Call Configure once, and forward OnControllerButtonStateChanged to RouteController.
     /// </summary>
     public static class PickerHost
@@ -23,7 +23,6 @@ namespace FullscreenKit
         public static void Configure(IPlayniteAPI api, string dataDirectory)
         {
             MoveManager.Init(api);
-            MetadataManager.Init(api, dataDirectory);
             QuickSettings.Load(dataDirectory); // no-op after the first call
         }
 
@@ -48,11 +47,11 @@ namespace FullscreenKit
         }
 
         /// <summary>
-        /// Fullscreen: X marks files, Start adds the marked ones; allowMove / allowRename enable the other modes
+        /// Fullscreen: X marks files, Start adds the marked ones; allowMove / allowRename / allowCreate enable the other modes
         /// (switch with left/right). Desktop: native multi-select file dialog.
         /// </summary>
         public static List<string> PickFiles(IPlayniteAPI api, string title, string[] extensions, string startPath = null,
-            bool allowMultiple = true, bool allowMove = false, bool allowRename = false)
+            bool allowMultiple = true, bool allowMove = false, bool allowRename = false, bool allowCreate = false)
         {
             extensions = extensions ?? new string[0];
             if (api.ApplicationInfo.Mode == ApplicationMode.Desktop)
@@ -70,7 +69,7 @@ namespace FullscreenKit
             var result = ShowView(api, new PickerOptions
             {
                 Title = title, FoldersOnly = false, AllowMultiple = allowMultiple,
-                AllowMove = allowMove, AllowRename = allowRename,
+                AllowMove = allowMove, AllowRename = allowRename, AllowCreate = allowCreate,
                 Extensions = extensions, StartPath = startPath
             });
             return result == null ? null : result.ToList();
@@ -104,7 +103,6 @@ namespace FullscreenKit
             options.IsInLibrary = LibraryIndex.Contains;
             options.UpdateLibrary = moves => LibraryPathUpdater.Update(api, moves);
             options.Notify = text => Notifier.Send(api, text, NotificationType.Info);
-            options.MetadataSources = () => MetadataFetcher.SourceNames(api);
 
             IList<string> result = null;
             var view = new FolderPickerView(options);

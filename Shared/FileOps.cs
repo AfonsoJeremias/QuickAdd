@@ -50,6 +50,35 @@ namespace FullscreenKit
             catch (Exception ex) { error = ex.Message; return false; }
         }
 
+        /// <summary>Creates an empty file or a folder inside <paramref name="parent"/>. Never overwrites.</summary>
+        public static bool TryCreate(string parent, string name, bool folder, out string path, out string error)
+        {
+            path = null; error = ValidateName(name);
+            if (error != null) return false;
+            try
+            {
+                var target = Path.Combine(parent, name);
+                if (File.Exists(target) || Directory.Exists(target)) { error = "\"" + name + "\" already exists here."; return false; }
+                if (folder) Directory.CreateDirectory(target);
+                else using (File.Create(target)) { }
+                path = target;
+                return true;
+            }
+            catch (Exception ex) { error = ex.Message; return false; }
+        }
+
+        /// <summary>"New folder" -> "New folder (2)" -> ... the first name that is free in <paramref name="parent"/>.</summary>
+        public static string UniqueName(string parent, string name, bool folder)
+        {
+            if (string.IsNullOrWhiteSpace(name)) name = folder ? "New folder" : "New file.txt";
+            var ext = folder ? "" : Path.GetExtension(name);
+            var baseName = ext.Length > 0 ? name.Substring(0, name.Length - ext.Length) : name;
+            var candidate = name;
+            for (int i = 2; i < 1000 && (File.Exists(Path.Combine(parent, candidate)) || Directory.Exists(Path.Combine(parent, candidate))); i++)
+                candidate = baseName + " (" + i + ")" + ext;
+            return candidate;
+        }
+
         static void Move(string from, string to, bool isDir)
         {
             if (isDir) Directory.Move(from, to); else File.Move(from, to);

@@ -17,9 +17,11 @@ namespace FullscreenKit
         [DataMember] public string LastFolder { get; set; }
         // add
         [DataMember] public bool AskNamesAdd { get; set; }
-        [DataMember] public bool DownloadMetadata { get; set; }
-        [DataMember] public string MetadataSource { get; set; }   // "" = all metadata plugins, IGDB first
         [DataMember] public bool SelectAdded { get; set; }        // select the new games in the Playnite library afterwards
+        // create
+        [DataMember] public string DefaultFolderName { get; set; }
+        [DataMember] public string DefaultFileName { get; set; }
+        [DataMember] public bool OpenNewFolder { get; set; }      // go into a folder right after creating it
         // move / rename
         [DataMember] public bool UpdateLibraryPaths { get; set; }
         [DataMember] public int MoveConflict { get; set; }        // 0 skip, 1 keep both
@@ -38,7 +40,8 @@ namespace FullscreenKit
         {
             SortBy = 0; SortDescending = false; ShowHidden = false;
             RememberLastFolder = true; LastFolder = "";
-            AskNamesAdd = true; DownloadMetadata = true; MetadataSource = ""; SelectAdded = true;
+            AskNamesAdd = true; SelectAdded = true;
+            DefaultFolderName = "New folder"; DefaultFileName = "New file.txt"; OpenNewFolder = true;
             UpdateLibraryPaths = true; MoveConflict = 0; KeepExtension = true;
         }
 
@@ -67,7 +70,8 @@ namespace FullscreenKit
                 {
                     var o = new DataContractJsonSerializer(typeof(QuickSettings)).ReadObject(fs) as QuickSettings;
                     if (o == null) return;
-                    if (o.MetadataSource == null) o.MetadataSource = "";
+                    if (string.IsNullOrWhiteSpace(o.DefaultFolderName)) o.DefaultFolderName = "New folder";
+                    if (string.IsNullOrWhiteSpace(o.DefaultFileName)) o.DefaultFileName = "New file.txt";
                     if (o.LastFolder == null) o.LastFolder = "";
                     current = o;
                 }
